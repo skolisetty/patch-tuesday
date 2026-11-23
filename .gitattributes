@@ -1,0 +1,7 @@
+# Keep LF everywhere: the pipeline, shell scripts and Python run inside WSL, where CRLF breaks them.
+* text=auto eol=lf
+# PowerShell scripts run on Windows.
+*.ps1 text eol=crlf
+# Binary assets.
+*.png binary
+*.glb binary
