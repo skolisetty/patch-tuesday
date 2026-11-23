@@ -32,30 +32,32 @@ Pop-ups that appear over these areas are explained in [Pop-ups and overlays](#po
 
 ## Icon cheat sheet
 
-| You see | Where | Meaning |
-|---|---|---|
-| Green machine, green label border | Board | Healthy |
-| Red machine that pulses, red label border | Board | **Compromised**: an attacker has taken it. Red scores its value every tick until someone restores it |
-| Amber machine inside an amber wire box | Board | **Isolated**: cut off for 5 ticks. Cannot be breached, attackers on it are thrown out, Red earns nothing from it, Blue loses 1 point per tick. **It is a pause, not a fix:** a breached machine is still breached underneath and turns red again after 5 ticks unless someone restores it |
-| Cyan ring on the floor and a small spinning ring above the machine | Board | **Monitored** (3 ticks). Halves breach odds and reveals any attacker standing there |
-| Red shock ring spreading out of a machine | Board | The machine just turned compromised: usually a breach, but also when a breached machine comes out of isolation |
-| Short bars under a machine's name (1 to 3) | Board | Machine **value**: points at stake on it |
-| Round dot on top of a machine | Board | One vulnerability card |
-| Diamond on top of a machine | Board | A card whose CVE is on the CISA **KEV** list (known to be exploited). *Not in the legend* |
-| Dot or diamond colour: red / blinking yellow / green | Board | Card unpatched / being patched / patched |
-| Small white spinning arrow above a card | Board | Card **new this week**: it arrived with the last **Advance week** |
-| Robot with a name tag | Board | A character. Second line of the tag = what it is doing now (blank while waiting) |
-| Faint see-through robot tagged **LAST SEEN** | Board | A hidden attacker, drawn where the defenders last saw it. It may have moved since |
-| Pulsing coloured ring under a robot | Board | That robot is a human player (cyan = Player 1, yellow = Player 2) |
-| `KEV` red tag | Player panel | Same as the diamond: known exploited |
-| `NEW` white tag | Player panel | Same as the white arrow: new this week |
-| `#28` | Player panel | Patch-priority rank: the 28th most urgent CVE in the whole world this week. `#--` = outside the top 500 |
-| `46.0%` (amber) | Player panel | The card's score: the predicted chance it gets exploited. It drives breach odds |
-| `95%` (amber) | Ledger, ODDS column | The actual breach odds of that one exploit attempt |
-| Red left stripe / blue left stripe | Ledger | Row by a red attacker / by a defender |
-| Dark red row | Ledger | A breach |
-| Faded row | Ledger | A WAIT (hide them with the **hide WAIT** chip) |
-| `MODEL` purple badge / `EPSS` amber badge | World clock | Card scores come from this week's trained model / from FIRST EPSS |
+| Icon | You see | Where | Meaning |
+|:---:|---|---|---|
+| <img src="img/icons/machine-healthy.svg" height="56" alt="healthy machine"> | Green machine, green label border | Board | Healthy |
+| <img src="img/icons/machine-compromised.svg" height="56" alt="compromised machine"> | Red machine that pulses, red label border | Board | **Compromised**: an attacker has taken it. Red scores its value every tick until someone restores it |
+| <img src="img/icons/machine-isolated.svg" height="56" alt="isolated machine"> | Amber machine inside an amber wire box | Board | **Isolated**: cut off for 5 ticks. Cannot be breached, attackers on it are thrown out, Red earns nothing from it, Blue loses 1 point per tick. **It is a pause, not a fix:** a breached machine is still breached underneath and turns red again after 5 ticks unless someone restores it |
+| <img src="img/icons/monitored.svg" height="44" alt="monitored rings"> | Cyan ring on the floor and a small spinning ring above the machine | Board | **Monitored** (3 ticks). Halves breach odds and reveals any attacker standing there |
+| <img src="img/icons/shock-ring.svg" height="44" alt="shock ring"> | Red shock ring spreading out of a machine | Board | The machine just turned compromised: usually a breach, but also when a breached machine comes out of isolation |
+| <img src="img/icons/value-bars.png" height="30" alt="value bars"> | Short bars under a machine's name (1 to 3) | Board | Machine **value**: points at stake on it |
+| <img src="img/icons/card-dot.svg" height="24" alt="card dot"> | Round dot on top of a machine | Board | One vulnerability card |
+| <img src="img/icons/card-diamond.svg" height="24" alt="KEV diamond"> | Diamond on top of a machine | Board | A card whose CVE is on the CISA **KEV** list (known to be exploited). *Not in the legend* |
+| <img src="img/icons/card-states.svg" height="24" alt="card colours"> | Dot or diamond colour: red / blinking yellow / green | Board | Card unpatched / being patched / patched |
+| <img src="img/icons/card-new.svg" height="30" alt="new this week arrow"> | Small white spinning arrow above a card | Board | Card **new this week**: it arrived with the last **Advance week** |
+| <img src="img/icons/robot-tag.png" height="56" alt="robot with name tag"> | Robot with a name tag | Board | A character. Second line of the tag = what it is doing now (blank while waiting) |
+| <img src="img/icons/last-seen.png" height="56" alt="last seen attacker"> | Faint see-through robot tagged **LAST SEEN** | Board | A hidden attacker, drawn where the defenders last saw it. It may have moved since |
+| <img src="img/icons/player1.png" height="56" alt="player ring"> <img src="img/icons/player-rings.svg" height="24" alt="player rings"> | Pulsing coloured ring under a robot | Board | That robot is a human player (cyan = Player 1, yellow = Player 2) |
+| <img src="img/icons/tag-kev.svg" height="26" alt="KEV tag"> | `KEV` red tag | Player panel | Same as the diamond: known exploited |
+| <img src="img/icons/tag-new.svg" height="26" alt="NEW tag"> | `NEW` white tag | Player panel | Same as the white arrow: new this week |
+| <img src="img/icons/rank.svg" height="20" alt="rank"> | `#28` | Player panel | Patch-priority rank: the 28th most urgent CVE in the whole world this week. `#--` = outside the top 500 |
+| <img src="img/icons/score.svg" height="20" alt="score"> | `46.0%` (amber) | Player panel | The card's score: the predicted chance it gets exploited. It drives breach odds |
+| <img src="img/icons/odds.svg" height="20" alt="odds"> | `95%` (amber) | Ledger, ODDS column | The actual breach odds of that one exploit attempt |
+| <img src="img/icons/row-red.svg" height="20" alt="red row"> <img src="img/icons/row-blue.svg" height="20" alt="blue row"> | Red left stripe / blue left stripe | Ledger | Row by a red attacker / by a defender |
+| <img src="img/icons/row-breach.svg" height="20" alt="breach row"> | Dark red row | Ledger | A breach |
+| <img src="img/icons/row-wait.svg" height="20" alt="wait row"> | Faded row | Ledger | A WAIT (hide them with the **hide WAIT** chip) |
+| <img src="img/icons/badge-model.svg" height="20" alt="MODEL badge"> <img src="img/icons/badge-epss.svg" height="20" alt="EPSS badge"> | `MODEL` purple badge / `EPSS` amber badge | World clock | Card scores come from this week's trained model / from FIRST EPSS |
+
+The robot pictures and the value bars are cut from the real screen. The other icons are redrawn in the game's own colours, so on screen they look like the close-ups in the sections below.
 
 ## 1. Title, match phase and connection
 
@@ -154,15 +156,15 @@ machine and read your [player panel](#8-and-9-player-panels).
 *Triage and Hunter (blue agents) moving; the faint Patient is a hidden attacker at its last seen
 spot.*
 
-| Robot colour | Who | Team |
-|---|---|---|
-| Red | Opportunist | Red agent |
-| Orange | Patient | Red agent |
-| Blue | Triage | Blue agent |
-| Violet | Patcher | Blue agent |
-| Light blue | Hunter | Blue agent |
-| Cyan, with a cyan ring underneath | Player 1 (you) | Blue human |
-| Yellow, with a yellow ring underneath | Player 2 | Blue human |
+| | Robot colour | Who | Team |
+|:---:|---|---|---|
+| <img src="img/icons/robot-red1.svg" height="30" alt="red robot"> | Red | Opportunist | Red agent |
+| <img src="img/icons/robot-red2.svg" height="30" alt="orange robot"> | Orange | Patient | Red agent |
+| <img src="img/icons/robot-blue1.svg" height="30" alt="blue robot"> | Blue | Triage | Blue agent |
+| <img src="img/icons/robot-blue2.svg" height="30" alt="violet robot"> | Violet | Patcher | Blue agent |
+| <img src="img/icons/robot-blue3.svg" height="30" alt="light blue robot"> | Light blue | Hunter | Blue agent |
+| <img src="img/icons/robot-p1.svg" height="30" alt="cyan robot"> | Cyan, with a cyan ring underneath | Player 1 (you) | Blue human |
+| <img src="img/icons/robot-p2.svg" height="30" alt="yellow robot"> | Yellow, with a yellow ring underneath | Player 2 | Blue human |
 
 - **Name tag:** the first line is the name in the character's colour. The second line is the action
   it is doing now, such as `MOVE`, `PATCH`, `EXPLOIT`, `SCAN`, `MONITOR`, `ISOLATE` or `RESTORE`.
