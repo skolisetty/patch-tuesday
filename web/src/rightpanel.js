@@ -247,7 +247,7 @@ export function createRightPanel() {
   }
 
   // The reason line must agree with the action line above it. When the agent is waiting now
-  // (a cooldown, or between decisions) but the stored reason belongs to an earlier action, it
+  // (a cooldown after an attack, or between decisions) but the stored reason belongs to an earlier action, it
   // is shown as that: "Last decision (tick 44): ...".
   function setReason(card, r, hidden, actor) {
     if (hidden) {
@@ -260,7 +260,7 @@ export function createRightPanel() {
       setText(card.reason, 'Why: thinking…');
       card.reason.className = 'agent-reason is-muted';
     } else {
-      const stale = !!actor && String(actor.action || 'WAIT') === 'WAIT' && !(Number(actor.busy_ticks) > 0) && r.action !== 'WAIT';
+      const stale = !!actor && String(actor.action || 'WAIT') === 'WAIT' && r.action !== 'WAIT';
       setText(card.reason, stale ? `Last decision (tick ${r.tick}): ${plainReason(r.text)}` : `Why: ${plainReason(r.text)}`);
       card.reason.className = stale ? 'agent-reason is-muted' : 'agent-reason';
     }

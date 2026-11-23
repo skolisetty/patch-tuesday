@@ -1,12 +1,11 @@
 // The two player panels: who you are, the next best move, what your last key did,
 // and the cards on the machine you stand on.
 
-import { el, fmtDanger, plural } from './dom.js';
+import { el, fmtDanger } from './dom.js';
 import { KEYS, fmtWorth, isAttacked, nextMove, patchChoice, sortCards, worth } from './advisor.js';
 
 const FEEDBACK_MS = 4000;
 const STATE_LABEL = { healthy: 'HEALTHY', compromised: 'BREACHED', isolated: 'ISOLATED' };
-const BUSY_LABEL = { PATCH: 'patching', RESTORE: 'restoring', MONITOR: 'monitoring', ISOLATE: 'isolating' };
 
 export function createPlayerPanels(boxes) {
   // feedback[pid]: { text, kind: 'ok' | 'bad' | 'note', at }
@@ -63,8 +62,12 @@ export function createPlayerPanels(boxes) {
     if (hit && c.patch_state === 'unpatched') worthCell.title = 'Red already attacked this card: patching it still blocks it, but scores nothing.';
 
     const status = el('span', 'hc-state');
-    if (isChoice) status.append(el('kbd', null, keys.patch), document.createTextNode(' patch'));
-    else status.textContent = c.patch_state === 'unpatched' && hit ? 'attacked' : c.patch_state || '';
+    if (isChoice) {
+      // A long key name ("Enter") fills the cell by itself; the header row says what the key does.
+      status.append(el('kbd', null, keys.patch));
+      if (keys.patch.length <= 2) status.append(document.createTextNode(' patch'));
+      status.title = `Press ${keys.patch} to patch this card`;
+    } else status.textContent = c.patch_state === 'unpatched' && hit ? 'attacked' : c.patch_state || '';
 
     row.append(
       el('span', 'hc-rank', Number.isFinite(c.priority_rank) ? `#${c.priority_rank}` : '—'),
@@ -105,10 +108,8 @@ export function createPlayerPanels(boxes) {
       );
       if (node.monitored) head.append(el('span', 'pill pill-mon', 'MONITORED'));
     }
-    if (actor.busy_ticks > 0) {
-      const what = BUSY_LABEL[actor.action] || 'busy';
-      head.append(el('span', 'hint-busy', `${what}: ${plural(actor.busy_ticks, 'tick')} left`));
-    }
+    // A running PATCH or RESTORE is reported by the NEXT line below ("Patching on X: 1 tick left"),
+    // where there is room for it; here it used to be cut off at the panel edge.
     frag.append(head);
 
     const move = nextMove(state, pid, ctx);
