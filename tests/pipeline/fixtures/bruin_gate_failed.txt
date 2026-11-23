@@ -1,0 +1,67 @@
+[02:35:36] [landing.cwe_names] >> Ingestion completed successfully!
+[02:35:38] [landing.kev] >> Ingestion completed successfully!
+[02:36:39] Finished: feat.snapshots (17ms)
+[02:37:09] Finished: feat.snapshots:role:not_null (1ms)
+[02:37:09] Finished: feat.snapshots:role:accepted_values (1ms)
+[02:37:09] Finished: feat.snapshots:idx:non_negative (1ms)
+[02:37:09] Finished: feat.snapshots:snapshot_date:not_null (1ms)
+[02:37:09] Finished: feat.snapshots:snapshot_date:unique (2ms)
+[02:37:09] Finished: feat.snapshots:custom-check:one_serve,_one_valid_and_the_configured_number_of_train_snapshots (5ms)
+[02:37:09] Finished: feat.snapshots:custom-check:every_snapshot_is_a_sunday (5ms)
+[02:37:22] Finished: ml.eval_metrics (162ms)
+[02:37:22] Finished: ml.eval_metrics:asof_date:not_null (1ms)
+[02:37:22] Finished: ml.eval_metrics:asof_date:unique (2ms)
+[02:37:22] Finished: ml.eval_metrics:valid_snapshot_date:not_null (1ms)
+[02:37:22] Finished: ml.eval_metrics:model_version:not_null (1ms)
+[02:37:22] Finished: ml.eval_metrics:pipeline_run_id:not_null (1ms)
+[02:37:22] Finished: ml.eval_metrics:n_candidates:positive (1ms)
+[02:37:22] Finished: ml.eval_metrics:n_positives:non_negative (1ms)
+[02:37:22] Finished: ml.eval_metrics:challenger_hits_at_50:non_negative (1ms)
+[02:37:22] Finished: ml.eval_metrics:epss_hits_at_50:non_negative (2ms)
+[02:37:22] Finished: ml.eval_metrics:challenger_p_at_50:min (1ms)
+[02:37:22] Finished: ml.eval_metrics:challenger_p_at_50:max (1ms)
+[02:37:22] Finished: ml.eval_metrics:epss_p_at_50:min (1ms)
+[02:37:22] Finished: ml.eval_metrics:epss_p_at_50:max (1ms)
+[02:37:22] Finished: ml.eval_metrics:gate_passed:not_null (1ms)
+[02:37:22] Failed: ml.eval_metrics:custom-check:challenger_beats_epss_on_precision@50 (7ms)
+[02:37:22] Finished: ml.eval_metrics:custom-check:validation_set_has_at_least_10_positives (7ms)
+[02:37:22] Finished: ml.eval_metrics:custom-check:challenger_was_scored_for_this_as-of_date (7ms)
+PASS landing.attack_techniques .......
+PASS landing.cwe_attack_map ......
+PASS landing.cwe_names ....
+PASS landing.kev_attack_map ......
+PASS landing.kev .....
+PASS landing.nvd_cves ..............
+PASS ml.promotions .
+PASS raw.world_clock ...........
+PASS feat.snapshots .......
+PASS ml.retract 
+PASS raw.cves ..........
+PASS raw.epss ..........
+PASS raw.kev .......
+PASS feat.snapshot_features .........................
+PASS stg.cve_technique .......
+PASS feat.fingerprints ......
+PASS ml.challenger_scores .............
+PASS ml.eval_metrics F................
+UPSTREAM FAILED ml.promote 
+UPSTREAM FAILED serve.attack_cards UUUUUUUUUUUUUUUUUUUUUUUU
+UPSTREAM FAILED serve.export_cards 
+UPSTREAM FAILED serve.export_priority 
+UPSTREAM FAILED serve.export_world 
+UPSTREAM FAILED serve.patch_priority UUUUUUUUUUUUUUUU
+UPSTREAM FAILED sim.reveal 
+bruin run completed with failures in 1m49.008s
+ ✗ Assets executed      1 failed due to checks / 17 succeeded / 7 skipped
+ ✗ Quality checks       1 failed / 155 succeeded / 40 skipped
+1 assets failed
+    └── challenger beats EPSS on precision@50 custom check - custom check 'challenger beats EPSS on precision@50' has returned 0 instead of the expected 1
+PASS serve.patch_priority ................
+PASS serve.attack_cards ........................
+PASS serve.export_cards 
+PASS serve.export_priority 
+PASS sim.reveal 
+PASS serve.export_world 
+bruin run completed successfully in 1.196s
+ ✓ Assets executed      6 succeeded
+ ✓ Quality checks       40 succeeded

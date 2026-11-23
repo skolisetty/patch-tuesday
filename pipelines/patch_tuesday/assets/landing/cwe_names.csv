@@ -1,0 +1,191 @@
+cwe_id,weakness_class
+CWE-20,improper input validation
+CWE-22,path traversal
+CWE-23,relative path traversal
+CWE-35,path traversal
+CWE-59,link following
+CWE-61,symlink following
+CWE-73,external file path control
+CWE-74,injection
+CWE-77,command injection
+CWE-78,OS command injection
+CWE-79,cross-site scripting
+CWE-80,cross-site scripting
+CWE-88,argument injection
+CWE-89,SQL injection
+CWE-90,LDAP injection
+CWE-91,XML injection
+CWE-93,CRLF injection
+CWE-94,code injection
+CWE-95,eval injection
+CWE-98,file inclusion
+CWE-113,header injection
+CWE-116,improper output encoding
+CWE-119,memory corruption
+CWE-120,buffer overflow
+CWE-121,stack buffer overflow
+CWE-122,heap buffer overflow
+CWE-125,out-of-bounds read
+CWE-129,improper index validation
+CWE-131,buffer size miscalculation
+CWE-134,format string
+CWE-170,improper null termination
+CWE-178,case sensitivity flaw
+CWE-184,incomplete denylist
+CWE-189,numeric error
+CWE-190,integer overflow
+CWE-191,integer underflow
+CWE-193,off-by-one error
+CWE-200,information exposure
+CWE-201,information leak in sent data
+CWE-203,observable discrepancy
+CWE-209,error message information leak
+CWE-212,improper removal of sensitive data
+CWE-250,unnecessary privileges
+CWE-252,unchecked return value
+CWE-254,security feature flaw
+CWE-255,credential management flaw
+CWE-256,plaintext password storage
+CWE-259,hard-coded password
+CWE-264,permissions flaw
+CWE-266,incorrect privilege assignment
+CWE-269,improper privilege management
+CWE-272,least privilege violation
+CWE-276,incorrect default permissions
+CWE-280,improper permission handling
+CWE-281,permission preservation flaw
+CWE-284,improper access control
+CWE-285,improper authorization
+CWE-287,improper authentication
+CWE-288,authentication bypass via alternate path
+CWE-289,authentication bypass via alternate name
+CWE-290,authentication bypass by spoofing
+CWE-294,authentication bypass by capture-replay
+CWE-295,improper certificate validation
+CWE-297,host mismatch in certificate
+CWE-300,channel accessible by non-endpoint
+CWE-306,missing authentication
+CWE-307,missing brute-force protection
+CWE-310,cryptographic issue
+CWE-311,missing encryption
+CWE-312,cleartext storage of sensitive data
+CWE-319,cleartext transmission
+CWE-321,hard-coded cryptographic key
+CWE-326,weak encryption
+CWE-327,broken cryptography
+CWE-328,weak hash
+CWE-330,weak randomness
+CWE-338,weak PRNG
+CWE-345,insufficient authenticity check
+CWE-346,origin validation error
+CWE-347,improper signature verification
+CWE-352,cross-site request forgery
+CWE-358,improper security check
+CWE-362,race condition
+CWE-367,time-of-check time-of-use race
+CWE-369,divide by zero
+CWE-377,insecure temporary file
+CWE-384,session fixation
+CWE-399,resource management error
+CWE-400,uncontrolled resource consumption
+CWE-401,memory leak
+CWE-404,improper resource shutdown
+CWE-407,algorithmic complexity
+CWE-415,double free
+CWE-416,use after free
+CWE-417,communication channel flaw
+CWE-425,forced browsing
+CWE-426,untrusted search path
+CWE-427,uncontrolled search path
+CWE-428,unquoted search path
+CWE-434,unrestricted file upload
+CWE-436,interpretation conflict
+CWE-441,unintended proxy
+CWE-444,request smuggling
+CWE-459,incomplete cleanup
+CWE-470,unsafe reflection
+CWE-476,null pointer dereference
+CWE-488,session data exposure
+CWE-494,download without integrity check
+CWE-497,system information exposure
+CWE-502,unsafe deserialization
+CWE-521,weak password requirements
+CWE-522,insufficiently protected credentials
+CWE-532,sensitive data in log files
+CWE-538,sensitive file exposure
+CWE-552,files accessible to external parties
+CWE-565,cookie trust flaw
+CWE-566,authorization bypass via SQL key
+CWE-601,open redirect
+CWE-610,externally controlled reference
+CWE-611,XML external entity
+CWE-613,insufficient session expiration
+CWE-617,reachable assertion
+CWE-639,insecure direct object reference
+CWE-640,weak password recovery
+CWE-643,XPath injection
+CWE-645,overly restrictive lockout
+CWE-648,privileged API misuse
+CWE-653,insufficient compartmentalization
+CWE-665,improper initialization
+CWE-667,improper locking
+CWE-668,resource exposure
+CWE-669,incorrect resource transfer
+CWE-670,always-incorrect control flow
+CWE-672,use after expiration
+CWE-674,uncontrolled recursion
+CWE-680,integer overflow to buffer overflow
+CWE-681,numeric conversion error
+CWE-682,incorrect calculation
+CWE-691,control flow flaw
+CWE-693,protection mechanism failure
+CWE-697,incorrect comparison
+CWE-703,improper exception handling
+CWE-704,type conversion error
+CWE-706,incorrect name resolution
+CWE-732,incorrect permission assignment
+CWE-754,unchecked exceptional condition
+CWE-755,exception handling flaw
+CWE-763,invalid pointer release
+CWE-770,unthrottled resource allocation
+CWE-772,resource leak
+CWE-776,XML entity expansion
+CWE-787,out-of-bounds write
+CWE-788,access after end of buffer
+CWE-798,hard-coded credentials
+CWE-822,untrusted pointer dereference
+CWE-823,out-of-range pointer offset
+CWE-824,uninitialized pointer access
+CWE-829,untrusted functionality inclusion
+CWE-833,deadlock
+CWE-834,excessive iteration
+CWE-835,infinite loop
+CWE-843,type confusion
+CWE-862,missing authorization
+CWE-863,incorrect authorization
+CWE-908,uninitialized resource use
+CWE-909,missing resource initialization
+CWE-912,hidden functionality
+CWE-913,dynamic code resource control
+CWE-915,mass assignment
+CWE-916,weak password hashing
+CWE-917,expression language injection
+CWE-918,server-side request forgery
+CWE-922,insecure storage
+CWE-923,improper channel restriction
+CWE-924,message integrity flaw
+CWE-926,exported component exposure
+CWE-940,improper channel source verification
+CWE-942,permissive cross-domain policy
+CWE-943,data query injection
+CWE-1021,clickjacking
+CWE-1104,unmaintained third-party component
+CWE-1188,insecure default
+CWE-1236,CSV injection
+CWE-1284,improper quantity validation
+CWE-1286,improper syntax validation
+CWE-1321,prototype pollution
+CWE-1333,regular expression denial of service
+CWE-1336,template injection
+CWE-1390,weak authentication
+CWE-1391,weak credentials

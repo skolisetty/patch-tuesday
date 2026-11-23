@@ -1,0 +1,131 @@
+# Bruin glossary (beta). Asset columns reuse these definitions with `extends: <Entity>.<Attribute>`.
+domains:
+  vulnerability-intel:
+    description: Public vulnerability data (NVD, CISA KEV, FIRST EPSS) replayed against a simulated world clock.
+    owners:
+      - "patch-tuesday-pipeline"
+    tags:
+      - nvd
+      - kev
+      - epss
+  threat-mapping:
+    description: Mapping of vulnerabilities to MITRE ATT&CK techniques (CTID KEV mappings, CWE to CAPEC to ATT&CK).
+    owners:
+      - "patch-tuesday-pipeline"
+    tags:
+      - attack
+  exploit-prediction:
+    description: The weekly challenger model, its EPSS baseline and the promotion gate.
+    owners:
+      - "patch-tuesday-pipeline"
+    tags:
+      - ml
+      - gate
+  world-simulation:
+    description: The world clock and the files the game reads.
+    owners:
+      - "patch-tuesday-pipeline"
+    tags:
+      - game
+
+entities:
+  CVE:
+    description: A published vulnerability record from the NVD 2.0 year feeds.
+    domains:
+      - vulnerability-intel
+    attributes:
+      ID:
+        type: string
+        description: CVE identifier, CVE-YYYY-NNNN.
+      PublishedDate:
+        type: date
+        description: Date NVD first published the record (UTC date of `published`).
+      Vendor:
+        type: string
+        description: CPE vendor field of the first vulnerable configuration (lower case), else the CNA-supplied vendor.
+      Product:
+        type: string
+        description: CPE product field of the first vulnerable configuration (lower case), else the CNA-supplied product.
+      CWE:
+        type: string
+        description: Primary CWE id (CWE-NNN); NVD-CWE-Other and NVD-CWE-noinfo are dropped.
+      CVSSBaseScore:
+        type: number
+        description: CVSS base score, v3.1 Primary first, then v3.1, v3.0, v4.0, v2.
+  KEVEntry:
+    description: An entry in the CISA Known Exploited Vulnerabilities catalogue.
+    domains:
+      - vulnerability-intel
+    attributes:
+      DateAdded:
+        type: date
+        description: Date CISA added the CVE to KEV. The prediction label and every KEV-derived feature is keyed on it.
+  EPSSScore:
+    description: A FIRST EPSS daily score as published in the Sunday snapshot file (model v2025.03.14).
+    domains:
+      - vulnerability-intel
+    attributes:
+      Score:
+        type: number
+        description: Probability (0..1) of exploitation activity in the next 30 days, as published that day.
+      Percentile:
+        type: number
+        description: Percentile (0..1) of the score among all scored CVEs that day.
+      ScoreDate:
+        type: date
+        description: Date of the EPSS snapshot file the score came from.
+  Technique:
+    description: A MITRE ATT&CK Enterprise technique or sub-technique (bundle 20.1).
+    domains:
+      - threat-mapping
+    attributes:
+      ID:
+        type: string
+        description: ATT&CK technique id, e.g. T1190 or T1059.004.
+      Name:
+        type: string
+        description: ATT&CK technique name.
+      Tactic:
+        type: string
+        description: First ATT&CK tactic (kill chain phase) listed for the technique.
+  Snapshot:
+    description: A point in world time at which features are computed as-of that date.
+    domains:
+      - exploit-prediction
+    attributes:
+      Date:
+        type: date
+        description: Snapshot (as-of) date, always a Sunday.
+      Role:
+        type: string
+        description: serve (the current world clock), valid (asof - H) or train (asof - 2H - 28j).
+  ModelScore:
+    description: Output of the weekly challenger model.
+    domains:
+      - exploit-prediction
+    attributes:
+      Score:
+        type: number
+        description: Predicted probability (0..1) that a CVE not yet in KEV enters KEV within the horizon.
+  AttackCard:
+    description: An abstract attack card in the game deck. Built from vendor, product, weakness class and scores only.
+    domains:
+      - world-simulation
+    attributes:
+      ID:
+        type: integer
+        description: Card id, unique within one attack_cards.json.
+      Score:
+        type: number
+        description: The score the game uses for breach odds (model score if the gate passed this week, else EPSS).
+      ScoreSource:
+        type: string
+        description: model or epss.
+  AgentDecision:
+    description: One row of the game's decision ledger (one actor, one tick).
+    domains:
+      - world-simulation
+    attributes:
+      LedgerID:
+        type: string
+        description: Unique ledger row id written by the game server.

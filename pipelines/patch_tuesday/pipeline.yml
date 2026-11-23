@@ -1,0 +1,29 @@
+name: patch-tuesday
+schedule: weekly
+start_date: "2020-01-01"
+catchup: false
+retries: 0
+
+default_connections:
+  duckdb: "duckdb-default"
+
+# Pipeline variables: one source of truth for the model task. SQL reads them as
+# {{ var.<name> }}; Python assets read them from the BRUIN_VARS JSON env var.
+# Override per run with --var, e.g. --var degrade_model=true (test switch only).
+variables:
+  horizon_days:
+    type: integer
+    default: 91
+    description: Label horizon H. A candidate is positive if it enters KEV within H days after its snapshot.
+  train_snapshots:
+    type: integer
+    default: 6
+    description: Number of training snapshots, 28 days apart, the newest at asof - 2H.
+  neg_sample_pct:
+    type: integer
+    default: 5
+    description: Percent of training negatives kept (deterministic hash sample). All positives are kept.
+  degrade_model:
+    type: boolean
+    default: false
+    description: TEST SWITCH ONLY. When true the challenger is replaced by a deliberately useless scorer so the promotion gate must fail.

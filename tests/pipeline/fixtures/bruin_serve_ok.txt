@@ -1,0 +1,9 @@
+PASS serve.patch_priority ................
+PASS serve.attack_cards ........................
+PASS serve.export_cards 
+PASS serve.export_priority 
+PASS sim.reveal 
+PASS serve.export_world 
+bruin run completed successfully in 1.196s
+ ✓ Assets executed      6 succeeded
+ ✓ Quality checks       40 succeeded

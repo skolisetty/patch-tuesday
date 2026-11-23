@@ -1,0 +1,16 @@
+MITRE CAPEC (Common Attack Pattern Enumeration and Classification) 2.1, STIX bundle
+Source used by this project: https://github.com/mitre/cti, file capec/2.1/stix-capec.json
+(downloaded by scripts/pull_data.sh to data/raw/mappings/stix-capec.json).
+
+What this project keeps from it: CAPEC-to-ATT&CK technique ids (landing.cwe_attack_map), which
+become technique_id / technique_name / tactic on cards whose mapping_source is cwe_capec.
+
+Copyright statement carried by the data itself (its STIX marking-definition, quoted verbatim):
+
+"CAPEC is sponsored by US-CERT in the office of Cybersecurity and Communications at the U.S.
+Department of Homeland Security. Copyright © 2007 - 2023, The MITRE Corporation. CAPEC and the
+CAPEC logo are trademarks of The MITRE Corporation."
+
+Terms of use: CAPEC is used under MITRE's CAPEC Terms of Use,
+https://capec.mitre.org/about/termsofuse.html. The licence of the mitre/cti repository that
+distributes this STIX bundle is fetched by scripts/pull_data.sh to LICENSES/MITRE-CTI-LICENSE.txt.

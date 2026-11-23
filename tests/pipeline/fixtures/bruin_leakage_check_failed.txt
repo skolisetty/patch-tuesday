@@ -1,0 +1,40 @@
+[02:46:17] [landing.cwe_names] >> Ingestion completed successfully!
+[02:46:19] [landing.kev] >> Ingestion completed successfully!
+[02:46:20] Finished: feat.snapshots (12ms)
+[02:46:21] Finished: feat.snapshots:role:not_null (1ms)
+[02:46:21] Finished: feat.snapshots:role:accepted_values (1ms)
+[02:46:21] Finished: feat.snapshots:idx:non_negative (1ms)
+[02:46:21] Finished: feat.snapshots:snapshot_date:not_null (1ms)
+[02:46:21] Finished: feat.snapshots:snapshot_date:unique (3ms)
+[02:46:21] Finished: feat.snapshots:custom-check:one_serve,_one_valid_and_the_configured_number_of_train_snapshots (5ms)
+[02:46:21] Failed: feat.snapshots:custom-check:every_snapshot_is_a_sunday (5ms)
+PASS landing.attack_techniques .......
+PASS landing.cwe_attack_map ......
+PASS landing.cwe_names ....
+PASS landing.kev_attack_map ......
+PASS landing.kev .....
+PASS landing.nvd_cves ..............
+PASS ml.promotions .
+PASS raw.world_clock ...........
+PASS feat.snapshots F......
+PASS ml.retract 
+PASS raw.cves ..........
+PASS raw.epss ..........
+PASS raw.kev .......
+PASS stg.cve_technique .......
+UPSTREAM FAILED feat.fingerprints UUUUUU
+UPSTREAM FAILED feat.snapshot_features UUUUUUUUUUUUUUUUUUUUUUUUU
+UPSTREAM FAILED ml.challenger_scores UUUUUUUUUUUUU
+UPSTREAM FAILED ml.eval_metrics UUUUUUUUUUUUUUUUU
+UPSTREAM FAILED ml.promote 
+UPSTREAM FAILED serve.attack_cards UUUUUUUUUUUUUUUUUUUUUUUU
+UPSTREAM FAILED serve.export_cards 
+UPSTREAM FAILED serve.export_priority 
+UPSTREAM FAILED serve.export_world 
+UPSTREAM FAILED serve.patch_priority UUUUUUUUUUUUUUUU
+UPSTREAM FAILED sim.reveal 
+bruin run completed with failures in 7.899s
+ ✗ Assets executed      1 failed due to checks / 13 succeeded / 11 skipped
+ ✗ Quality checks       1 failed / 94 succeeded / 101 skipped
+1 assets failed
+    └── every snapshot is a Sunday custom check - custom check 'every snapshot is a Sunday' has returned 7 instead of the expected 0

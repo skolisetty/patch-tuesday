@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Patch Tuesday</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <div id="app">
+      <header id="topbar">
+        <div class="brand">
+          <div class="logo">PATCH<span>TUESDAY</span></div>
+          <div class="brand-sub">
+            <span id="phase" class="phase phase-lobby">LOBBY</span>
+            <span id="conn" class="conn conn-down"><i></i><b id="conn-text">CONNECTING</b></span>
+          </div>
+        </div>
+
+        <section id="scoreboard" class="panel" aria-label="Scoreboard">
+          <div class="score score-blue">
+            <label>BLUE</label>
+            <output id="score-blue">0</output>
+          </div>
+          <div class="score-vs">vs</div>
+          <div class="score score-red">
+            <label>RED</label>
+            <output id="score-red">0</output>
+          </div>
+          <div class="sb-stats">
+            <div class="sb-nodes">
+              <span class="st st-healthy"><i></i><b id="n-healthy">0</b> healthy</span>
+              <span class="st st-compromised"><i></i><b id="n-compromised">0</b> compromised</span>
+              <span class="st st-isolated"><i></i><b id="n-isolated">0</b> isolated</span>
+            </div>
+            <div class="sb-breach">
+              Breaches <b id="breaches-total">0</b>
+              <span class="sep">|</span>
+              on top-50 priority CVEs <b id="breaches-top50">0</b>
+            </div>
+          </div>
+          <div class="sb-ticks">
+            <label>TICKS LEFT</label>
+            <output id="ticks-left">150</output>
+            <div class="sb-time"><span id="time-left">5:00</span></div>
+            <div class="bar"><div id="tick-bar"></div></div>
+          </div>
+        </section>
+
+        <section id="clock" class="panel" aria-label="World clock">
+          <div class="clock-date">
+            <label>WORLD CLOCK</label>
+            <output id="asof">----------</output>
+          </div>
+          <div class="clock-model">
+            <div class="clock-line">
+              <span id="src-badge" class="badge badge-epss">EPSS</span>
+              <span id="model-version" class="mono">no model promoted</span>
+              <span id="adv" class="adv" hidden><i class="spinner"></i>advancing</span>
+            </div>
+            <div class="clock-line p50">
+              P@50&nbsp; model <b id="p50-model">--</b>
+              <span class="sep">|</span>
+              EPSS <b id="p50-epss">--</b>
+            </div>
+          </div>
+        </section>
+
+        <section id="controls" aria-label="Controls">
+          <button id="btn-start" class="btn btn-go" type="button">Start</button>
+          <button id="btn-reset" class="btn" type="button">Reset</button>
+          <button id="btn-advance" class="btn btn-adv" type="button">Advance week</button>
+        </section>
+      </header>
+
+      <main id="stage">
+        <canvas id="scene"></canvas>
+        <div id="stage-legend" class="stage-legend">
+          <span><i class="sw sw-healthy"></i>healthy</span>
+          <span><i class="sw sw-compromised"></i>compromised</span>
+          <span><i class="sw sw-isolated"></i>isolated</span>
+          <span><i class="sw sw-ring"></i>monitored</span>
+          <span><i class="pip pip-unpatched"></i>unpatched</span>
+          <span><i class="pip pip-patching"></i>patching</span>
+          <span><i class="pip pip-patched"></i>patched</span>
+          <span><i class="pip pip-new"></i>new this week</span>
+        </div>
+        <div id="banner" class="banner" hidden></div>
+        <div id="stage-msg" class="stage-msg" hidden>
+          <div id="stage-msg-title" class="stage-msg-title"></div>
+          <div id="stage-msg-sub" class="stage-msg-sub"></div>
+        </div>
+        <div id="scene-note" class="scene-note" hidden></div>
+      </main>
+
+      <aside id="ledger-panel" class="panel" aria-label="Decision ledger">
+        <div class="panel-head">
+          <h2>DECISION LEDGER</h2>
+          <span id="ledger-count" class="muted">0 rows</span>
+          <button id="btn-waits" class="chip" type="button" aria-pressed="false">hide WAIT</button>
+        </div>
+        <div class="ledger-cols">
+          <span>tick</span><span>actor</span><span>action</span><span>node</span><span>odds</span><span>outcome</span>
+        </div>
+        <div class="ledger-cols2">CVE and reason on the second line of each row</div>
+        <div id="ledger" class="ledger"></div>
+      </aside>
+
+      <section id="hints" aria-label="Patch priority hints">
+        <div id="hint-p1" class="hint hint-p1 panel"></div>
+        <div id="hint-p2" class="hint hint-p2 panel"></div>
+      </section>
+
+      <footer id="footer">
+        <div class="ticker-wrap panel">
+          <span class="ticker-label">EVENTS</span>
+          <div id="ticker" class="ticker"></div>
+        </div>
+        <div class="foot-row">
+          <div id="legend" class="legend">
+            <span class="lg lg-p1"><b>P1</b>
+              <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move
+              <kbd>E</kbd> patch <kbd>Q</kbd> monitor <kbd>R</kbd> restore <kbd>F</kbd> isolate</span>
+            <span class="lg lg-p2"><b>P2</b>
+              <kbd>&uarr;</kbd><kbd>&larr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd> move
+              <kbd>Enter</kbd> patch <kbd>R-Shift</kbd> monitor <kbd>/</kbd> restore <kbd>.</kbd> isolate</span>
+          </div>
+          <div id="notices" class="notices">
+            <span>This product uses data from the NVD API but is not endorsed or certified by the NVD.</span>
+            <span>Data: CISA KEV, FIRST EPSS, MITRE ATT&amp;CK. Attacks are abstract game moves.</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <div id="flash" class="flash" hidden>
+      <div class="flash-title">RED CAMPAIGN</div>
+      <div id="flash-text" class="flash-text"></div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

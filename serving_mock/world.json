@@ -1,0 +1,1 @@
+[{"asof_date": "2026-03-22", "window_start": "2026-03-16", "pipeline_run_id": "mock-2026-03-22", "score_source": "epss", "model_version": null, "challenger_p_at_50": 0.12, "epss_p_at_50": 0.16, "challenger_hits_at_50": 6, "epss_hits_at_50": 8, "n_positives": 41, "n_candidates": 250000, "n_cves_visible": 251000, "n_kev_visible": 1500, "n_new_cves_this_week": 900, "n_cards": 120}]

@@ -1,0 +1,10 @@
+# Copy to .bruin.yml at the repo root and change `path` to a folder on the WSL
+# ext4 filesystem (for example /home/<you>/.patch-tuesday/world.duckdb).
+# Only `bruin` opens this file, one run at a time (scripts/advance.py holds data/.advance.lock).
+default_environment: default
+environments:
+  default:
+    connections:
+      duckdb:
+        - name: "duckdb-default"
+          path: "/home/<you>/.patch-tuesday/world.duckdb"
