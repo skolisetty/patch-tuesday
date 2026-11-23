@@ -125,3 +125,41 @@ def test_flag_off_does_nothing():
     m = band.BandMirror(api_key=AGENT_KEY, flag=False, transport=httpx.MockTransport(fake.handler))
     asyncio.run(_run(m, [("breach", "a")], 0.2))
     assert fake.headers == [] and m.submit("breach", "a") is False
+
+
+def test_message_mode_posts_one_digest_that_mentions_the_human():
+    """Band Desktop's Chat view shows messages, not thought events: highlights go out as a digest."""
+    import json as _json
+
+    import httpx
+
+    posts = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/participants"):
+            return httpx.Response(200, json={"data": [
+                {"id": "a1", "type": "Agent", "handle": "me/patch-tuesday", "name": "Patch Tuesday"},
+                {"id": "u1", "type": "User", "handle": "me", "name": "Me"}]})
+        if path.endswith("/messages"):
+            posts.append(_json.loads(request.content))
+            return httpx.Response(201, json={"data": {"id": "m1"}})
+        return httpx.Response(404, json={"error": {"code": "not_found"}})
+
+    m = band.BandMirror(api_key="band_a_test", chat_id="c1", base_url="https://band.test/api/v1", interval=0.05,
+                        transport=httpx.MockTransport(handler), flag=True, post_as="message")
+
+    async def run():
+        await m.start()
+        for i in range(3):
+            m.submit("breach", f"breach {i}")
+        await asyncio.sleep(0.4)
+        await m.stop()
+
+    asyncio.run(run())
+    assert len(posts) >= 1
+    first = posts[0]["message"]
+    assert first["mentions"] == [{"id": "u1", "handle": "me", "name": "Me"}]
+    assert first["content"].startswith("@me BREACH: breach 0")
+    assert sum(p["message"]["content"].count("BREACH:") for p in posts) == 3
+    assert m.stats["sent"] == 3

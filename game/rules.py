@@ -9,7 +9,8 @@ import random
 from dataclasses import dataclass, field
 
 from .config import TUNING, Tuning
-from .state import (DIRS, RESOLVE_ORDER, Actor, Card, MatchState, Node, dist, neighbours, node_at)
+from . import feedback as fb
+from .state import (DIRS, RESOLVE_ORDER, Actor, Card, MatchState, Node, delta, dist, neighbours, node_at)
 
 RED_ACTIONS = ("MOVE", "SCAN", "EXPLOIT", "PIVOT", "WAIT")
 BLUE_ACTIONS = ("MOVE", "PATCH", "MONITOR", "ISOLATE", "RESTORE", "WAIT")
@@ -36,6 +37,8 @@ class StepResult:
     rows: list[dict]
     events: list[dict]
     facts: dict[str, dict]   # ledger_id -> structured reason (the facts the policy used)
+    deltas: list[dict] = field(default_factory=list)     # every score change of this tick, with its cause
+    feedback: list[dict] = field(default_factory=list)   # one plain sentence per human action resolved
 
 
 def clamp(x: float, lo: float, hi: float) -> float:
@@ -144,6 +147,8 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
     rows: list[dict] = []
     events: list[dict] = []
     facts: dict[str, dict] = {}
+    deltas: list[dict] = []
+    feedback: list[dict] = []
 
     def ev(kind: str, text: str) -> None:
         events.append({"kind": kind, "text": text})
@@ -169,7 +174,11 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
                 card = node.card(b.get("card")) if b.get("card") is not None else None
                 row = _row(state, actor, kind, actor.node_id, outcome, pol, text, card=card)
             else:
-                row = _complete(state, actor, b, pol, ev)
+                info: dict = {}
+                row = _complete(state, actor, b, pol, ev, deltas, info)
+                if actor.kind == "human":
+                    feedback.append(fb.entry(actor, kind, row["outcome"], node, info.get("card"),
+                                             info.get("gained"), t))
             if actor.busy_ticks == 0:
                 actor.busy = None
             rows.append(row)
@@ -189,6 +198,8 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
         p = roll = None
         with_score = False
         outcome = "waiting"
+        info = {}                      # filled by _complete when the action finishes this tick
+        acted_on = node                # the machine the action applies to (a MOVE leaves it)
 
         if kind == "MOVE":
             tgt = act.target_node
@@ -211,7 +222,7 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
                 actor.busy = {"action": "PATCH", "node": node.id, "card": card.card_id, "policy": pol}
                 outcome = "patching"
                 if actor.busy_ticks == 0:   # only if patch_ticks is tuned down to 1
-                    r2 = _complete(state, actor, actor.busy, pol, ev)
+                    r2 = _complete(state, actor, actor.busy, pol, ev, deltas, info)
                     outcome, actor.busy = r2["outcome"], None
 
         elif kind == "MONITOR":
@@ -247,7 +258,7 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
                 actor.busy = {"action": "RESTORE", "node": node.id, "card": None, "policy": pol}
                 outcome = "restoring"
                 if actor.busy_ticks == 0:
-                    r2 = _complete(state, actor, actor.busy, pol, ev)
+                    r2 = _complete(state, actor, actor.busy, pol, ev, deltas, info)
                     outcome, actor.busy = r2["outcome"], None
 
         elif kind == "INTEL":
@@ -303,11 +314,16 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
                     if first:
                         node.ever_breached = True
                         state.score.red += t.first_breach_points
+                        state.score.first_breach += t.first_breach_points
+                        deltas.append(delta("red", t.first_breach_points, "first_breach", node.id,
+                                            actor.id, card.cve_id))
+                    if card.breached_tick is None:
+                        card.breached_by, card.breached_tick = actor.name, state.tick
                     actor.revealed_ticks = max(actor.revealed_ticks, t.breach_reveal_ticks)
                     actor.busy_ticks = t.exploit_cooldown_success
                     actor.busy = {"action": "WAIT", "node": None, "card": None, "why": "digging in"}
                     ev("breach", f"{actor.name} breached {node.name} via {card.cve_id}"
-                                 f" (odds {p:.2f}, roll {roll:.2f})" + (", first breach +5." if first else "."))
+                                 f" (breach chance {p:.0%}, roll {roll:.2f})" + (", first breach +5." if first else "."))
                 else:
                     outcome = "failed"
                     if card.patch_state == "patched" or node.state == "isolated":
@@ -324,6 +340,9 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
         row = _row(state, actor, kind, actor.node_id, outcome, pol, reason, card=card, p=p, roll=roll,
                    with_score=with_score)
         rows.append(row)
+        if actor.kind == "human" and kind != "WAIT":
+            feedback.append(fb.entry(actor, kind, outcome, state.nodes[actor.node_id] if kind == "MOVE" else acted_on,
+                                     info.get("card", card), info.get("gained"), t))
         f = dict(act.facts)
         f.update({"actor": actor.name, "role": actor.role, "team": actor.team, "action": kind,
                   "node": state.nodes[actor.node_id].name, "node_value": state.nodes[actor.node_id].value,
@@ -338,8 +357,12 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
     for node in state.nodes:
         if node.state == "compromised":
             state.score.red += node.value
+            state.score.held += node.value
+            deltas.append(delta("red", node.value, "held", node.id))
         elif node.state == "isolated":
             state.score.blue -= t.isolate_cost
+            state.score.isolate_cost -= t.isolate_cost
+            deltas.append(delta("blue", -t.isolate_cost, "isolate_cost", node.id))
     for node in state.nodes:
         if node.monitored_ticks > 0:
             node.monitored_ticks -= 1
@@ -359,24 +382,35 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
     state.tick += 1
     if state.campaign and state.tick >= state.campaign.get("until", 0):
         state.campaign = None
-    return StepResult(rows=rows, events=events, facts=facts)
+    return StepResult(rows=rows, events=events, facts=facts, deltas=deltas, feedback=feedback)
 
 
-def _complete(state: MatchState, actor: Actor, b: dict, pol: str, ev) -> dict:
-    """Finish a PATCH or RESTORE that was started on an earlier tick."""
+def _complete(state: MatchState, actor: Actor, b: dict, pol: str, ev, deltas: list[dict] | None = None,
+              info: dict | None = None) -> dict:
+    """Finish a PATCH or RESTORE that was started on an earlier tick. Score changes are appended
+    to `deltas`; `info` receives {"card", "gained"} for the human feedback sentence (gained is
+    None when the patch earned nothing because the card had already been attacked)."""
+    deltas = deltas if deltas is not None else []
+    info = info if info is not None else {}
     t = state.tuning
     node = state.nodes[b["node"]] if b.get("node") is not None else state.nodes[actor.node_id]
     kind = b["action"]
     if kind == "PATCH":
         card = node.card(b.get("card"))
+        info["card"] = card
         if card is None or card.patch_state != "patching":
             return _row(state, actor, "PATCH", node.id, "noop", pol,
                         f"{actor.name} found nothing left to patch at {node.name}.", card=card, with_score=card is not None)
         card.patch_state = "patched"
+        card.patched_by, card.patched_tick = actor.name, state.tick
         gained = 0.0
         if not card.attempted:
             gained = node.value * card.score
             state.score.blue += gained
+            state.score.patch += gained
+            info["gained"] = gained
+            if gained:
+                deltas.append(delta("blue", gained, "patch", node.id, actor.id, card.cve_id))
         ev("patched", f"{actor.name} patched {card.cve_id} on {node.name}"
                       + (f" (+{gained:.2f})." if gained else " (already attacked, no points)."))
         return _row(state, actor, "PATCH", node.id, "patched", pol,
@@ -394,6 +428,8 @@ def _complete(state: MatchState, actor: Actor, b: dict, pol: str, ev) -> dict:
                 c.patch_state = "patched"       # the way in is closed; no patch points
         node.monitored_ticks = max(node.monitored_ticks, t.restore_monitor_ticks)
         state.score.blue += t.restore_points
+        state.score.restore += t.restore_points
+        deltas.append(delta("blue", t.restore_points, "restore", node.id, actor.id))
         ev("restored", f"{actor.name} restored {node.name} (+{t.restore_points:g}).")
         return _row(state, actor, "RESTORE", node.id, "restored", pol,
                     f"{actor.name} finished restoring {node.name}.")

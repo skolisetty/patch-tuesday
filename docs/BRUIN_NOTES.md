@@ -1,5 +1,8 @@
 # Bruin notes: what v0.11.831 really does
 
+> A lab notebook written before the pipeline was built: small experiments that show how Bruin behaves, for readers who use Bruin themselves.
+> You do not need it to play or to understand the project. How the project uses Bruin is in [PIPELINE.md](PIPELINE.md).
+
 Every statement here was run on 2026-11-23 with Bruin v0.11.831 in WSL Ubuntu 24.04, in a throwaway repo at `~/bruin-smoke` (DuckDB file `~/bruin-smoke/smoke.duckdb`, pipeline `pipelines/smoke`). This file replaces every `[U]` and `[X]` Bruin item in `design.md`. Anything not run is listed under "Not tested" at the end.
 
 Sample data: the KEV CSV (1,790 rows) and `epss_scores-2026-03-22.csv.gz` / `-2026-03-29.csv.gz` (321,918 and 323,647 rows).

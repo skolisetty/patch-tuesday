@@ -21,10 +21,26 @@ const STATE_COLOR = {
   isolated: 0xffb020,
 };
 const PIP_COLOR = {
-  unpatched: 0xff5a3c,
   patching: 0xffc933,
   patched: 0x2bd98a,
 };
+// Unpatched cards are coloured and sized by danger (the card's predicted chance of being
+// exploited). The HTML board legend uses the same three colours.
+const DANGER = {
+  low: { color: 0x8a97a8, size: 0.72 }, // under 5%
+  medium: { color: 0xff9f43, size: 1.0 }, // 5% to 50%
+  high: { color: 0xff3048, size: 1.3 }, // over 50%, or known exploited (KEV)
+};
+const FLOAT_COLOR = { blue: '#62b0ff', red: '#ff5468' };
+const FLOAT_CAUSE = { patch: 'patch', restore: 'restore', isolate_cost: 'isolated', first_breach: 'breach' };
+const FLOAT_MS = 1600;
+const FLOAT_MAX = 14; // live score-change sprites; the oldest is reused beyond this
+const LABEL_Y = 3.05;
+const LABEL_Z = -0.75;
+const LABEL_W = 4.3; // world width of the machine name label
+const LABEL_H = (LABEL_W * 112) / 440;
+const BREACH_W = 3.6;
+const BREACH_H = (BREACH_W * 84) / 384;
 const ACTOR_TINT = {
   red1: 0xff3b4e,
   red2: 0xff7a2f,
@@ -100,6 +116,48 @@ function fitText(ctx, text, maxW, size, weight, family) {
 
 const FONT = '"Cascadia Mono", "Consolas", "SFMono-Regular", "Menlo", monospace';
 
+function dangerLevel(card) {
+  const s = Number(card.score);
+  if (card.in_kev || s > 0.5) return 'high';
+  if (s >= 0.05) return 'medium';
+  return 'low'; // also when the score is missing
+}
+
+// "+1.4", "+3", "-1": one decimal at most, sign always shown.
+function formatAmount(amount) {
+  const r = Math.round(amount * 10) / 10;
+  const body = Number.isInteger(r) ? String(Math.abs(r)) : Math.abs(r).toFixed(1);
+  return (r < 0 ? '-' : '+') + body;
+}
+
+// One "Red +N / tick" texture per machine value, shared by every breached machine.
+function breachMaterial(shared, value) {
+  let mat = shared.breachMat.get(value);
+  if (mat) return mat;
+  const canvas = document.createElement('canvas');
+  canvas.width = 384;
+  canvas.height = 84;
+  const ctx = canvas.getContext('2d');
+  roundRect(ctx, 5, 5, canvas.width - 10, canvas.height - 10, 18);
+  ctx.fillStyle = 'rgba(92, 8, 20, 0.94)';
+  ctx.fill();
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = hex(STATE_COLOR.compromised);
+  ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffe3e6';
+  const text = `Red +${value} / tick`;
+  fitText(ctx, text, canvas.width - 40, 46, 700, FONT);
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
+  shared.breachMat.set(value, mat);
+  return mat;
+}
+
 // ---------------------------------------------------------------- nodes
 
 class NodeView {
@@ -112,7 +170,8 @@ class NodeView {
     this.pipKey = '';
     this.pulseT0 = -1e9;
     this.newMarkers = [];
-    this.patchingPips = [];
+    this.pulsePips = [];
+    this.breach = null; // "Red +N / tick" sprite, made the first time this machine is breached
 
     const c = nodeCenter(id);
     const g = (this.group = new THREE.Group());
@@ -121,6 +180,8 @@ class NodeView {
     const pad = new THREE.Mesh(shared.padGeo, shared.padMat);
     pad.position.set(0, PAD_Y / 2, 0.55);
     pad.receiveShadow = true;
+    pad.userData.nodeId = id; // click target: see pickNode()
+    this.pad = pad;
     g.add(pad);
 
     this.rackMat = new THREE.MeshStandardMaterial({
@@ -134,6 +195,7 @@ class NodeView {
     rack.position.set(0, PAD_Y + 0.9, -0.6);
     rack.castShadow = true;
     rack.receiveShadow = true;
+    rack.userData.nodeId = id;
     g.add(rack);
 
     // Glowing vent strips on the rack front and a rim on the pad.
@@ -181,14 +243,41 @@ class NodeView {
     this.shock.visible = false;
     g.add(this.shock);
 
+    // Dark tray on the rack top, so the pips read against every rack colour (a red pip on a
+    // breached, red rack would vanish otherwise).
+    this.tray = new THREE.Mesh(shared.trayGeo, shared.trayMat);
+    this.tray.position.set(0, PAD_Y + 1.8 + 0.06, -0.42); // tall enough to clear the breach pulse
+    this.tray.visible = false;
+    g.add(this.tray);
+
     // Card pips sit on top of the rack, toward the camera.
     this.pips = new THREE.Group();
     this.pips.position.set(0, PAD_Y + 1.8 + 0.24, -0.25);
     g.add(this.pips);
 
-    this.label = makeTextSprite(512, 144, 3.7, true);
-    this.label.sprite.position.set(0, 3.05, -0.75);
+    this.label = makeTextSprite(440, 112, LABEL_W, true);
+    this.label.sprite.position.set(0, LABEL_Y, LABEL_Z);
     g.add(this.label.sprite);
+  }
+
+  // Small red label sitting on top of the name label while the machine is compromised.
+  setBreach(value) {
+    if (!(value > 0)) {
+      if (this.breach) this.breach.visible = false;
+      return;
+    }
+    const mat = breachMaterial(this.shared, value);
+    if (!this.breach) {
+      const sp = (this.breach = new THREE.Sprite(mat));
+      sp.scale.set(BREACH_W, BREACH_H, 1);
+      // Same anchor as the name label, shifted up in screen space (sprite.center), so the two
+      // never overlap whatever the camera pitch.
+      sp.center.set(0.5, -(LABEL_H / 2 + 0.03) / BREACH_H);
+      sp.position.set(0, LABEL_Y, LABEL_Z);
+      this.group.add(sp);
+    }
+    if (this.breach.material !== mat) this.breach.material = mat;
+    this.breach.visible = true;
   }
 
   drawLabel(name, value, state) {
@@ -207,44 +296,64 @@ class NodeView {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#eaf2ff';
-    fitText(ctx, name, canvas.width - 60, 62, 700, FONT);
-    ctx.fillText(name, canvas.width / 2, 58);
-    // Node value shown as filled blocks.
-    const v = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
-    const bw = 34;
-    const gap = 12;
-    const total = v * bw + (v - 1) * gap;
-    ctx.fillStyle = col;
-    for (let i = 0; i < v; i++) {
-      ctx.fillRect(canvas.width / 2 - total / 2 + i * (bw + gap), 100, bw, 16);
+    // Name, then the machine value as a "×3" chip in the state colour.
+    const v = Math.round(Number(value) || 0);
+    const cy = canvas.height / 2 + 2;
+    const chipText = v > 0 ? `\u00d7${v}` : '';
+    ctx.font = `700 54px ${FONT}`;
+    const chipW = chipText ? Math.ceil(ctx.measureText(chipText).width) + 30 : 0;
+    const gap = chipText ? 20 : 0;
+    fitText(ctx, name, canvas.width - 44 - chipW - gap, 60, 700, FONT);
+    const nameW = ctx.measureText(name).width;
+    const x0 = (canvas.width - (nameW + gap + chipW)) / 2;
+    ctx.fillText(name, x0 + nameW / 2, cy);
+    if (chipText) {
+      const cx = x0 + nameW + gap;
+      roundRect(ctx, cx, cy - 36, chipW, 70, 12);
+      ctx.fillStyle = col;
+      ctx.fill();
+      ctx.fillStyle = '#06101c';
+      ctx.font = `700 54px ${FONT}`;
+      ctx.fillText(chipText, cx + chipW / 2, cy);
     }
     tex.needsUpdate = true;
   }
 
   rebuildPips(cards) {
     const key = cards
-      .map((c) => `${c.card_id}:${c.patch_state}:${c.is_new ? 1 : 0}:${c.in_kev ? 1 : 0}`)
+      .map((c) => `${c.card_id}:${c.patch_state}:${c.is_new ? 1 : 0}:${c.in_kev ? 1 : 0}:${dangerLevel(c)}`)
       .join(',');
     if (key === this.pipKey) return;
     this.pipKey = key;
     this.pips.clear(); // geometries and materials are shared, nothing to dispose
     this.newMarkers = [];
+    this.pulsePips = [];
     const n = cards.length;
+    this.tray.visible = n > 0;
     if (!n) return;
-    const step = Math.min(0.42, 2.0 / n);
-    const size = Math.min(1, step / 0.42);
+    const step = Math.min(0.5, 2.2 / n);
+    const size = Math.min(1, step / 0.5);
     cards.forEach((c, i) => {
-      const mat = this.shared.pipMat[c.patch_state] || this.shared.pipMat.unpatched;
+      // Patching (blinking yellow) and patched (green) keep one size; an unpatched card
+      // is coloured and sized by its danger.
+      const level = c.patch_state === 'patching' || c.patch_state === 'patched' ? null : dangerLevel(c);
+      const mat = level ? this.shared.dangerMat[level] : this.shared.pipMat[c.patch_state];
       const pip = new THREE.Mesh(c.in_kev ? this.shared.pipKevGeo : this.shared.pipGeo, mat);
+      const base = size * (level ? DANGER[level].size : 0.9);
       pip.position.set((i - (n - 1) / 2) * step, 0, 0);
-      pip.scale.setScalar(size);
+      pip.scale.setScalar(base);
       this.pips.add(pip);
+      if (level === 'high') {
+        pip.userData.base = base;
+        pip.userData.phase = i * 1.3 + this.id;
+        this.pulsePips.push(pip);
+      }
       if (c.is_new) {
         const mk = new THREE.Mesh(this.shared.newGeo, this.shared.newMat);
-        mk.position.set(pip.position.x, 0.42, 0);
+        mk.position.set(pip.position.x, 0.46, 0);
         mk.rotation.x = Math.PI; // point down at the pip
         mk.scale.setScalar(size);
-        mk.userData.baseY = 0.42;
+        mk.userData.baseY = 0.46;
         mk.userData.phase = i * 0.9;
         this.pips.add(mk);
         this.newMarkers.push(mk);
@@ -266,7 +375,8 @@ class NodeView {
     this.monitored = !!n.monitored;
     this.ring.visible = this.monitored;
     this.ring2.visible = this.monitored;
-    this.drawLabel(String(n.name ?? `NODE-${this.id}`), n.value, state);
+    this.drawLabel(String(n.name ?? `MACHINE ${String(this.id + 1).padStart(2, '0')}`), n.value, state);
+    this.setBreach(state === 'compromised' ? Math.round(Number(n.value) || 0) : 0);
     this.rebuildPips(Array.isArray(n.cards) ? n.cards : []);
   }
 
@@ -282,6 +392,9 @@ class NodeView {
       const s = 1 + 0.04 * Math.sin(t * 3 + this.id);
       this.ring.scale.setScalar(s);
       this.ring2.rotation.z = t * 1.5;
+    }
+    for (const pip of this.pulsePips) {
+      pip.scale.setScalar(pip.userData.base * (1 + 0.13 * Math.sin(t * 3.2 + pip.userData.phase)));
     }
     for (const mk of this.newMarkers) {
       mk.position.y = mk.userData.baseY + 0.08 * Math.sin(t * 4 + mk.userData.phase);
@@ -630,13 +743,13 @@ function loadTemplate() {
  * If WebGL is not available it returns a stub with ok = false, so the HUD
  * keeps working.
  */
-export function createScene(canvas, container, { onNote } = {}) {
+export function createScene(canvas, container, { onNote, onPick } = {}) {
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   } catch (err) {
     if (onNote) onNote('3D view unavailable (WebGL could not start). The HUD still works.');
-    return { ok: false, applyState() {}, setTickMs() {}, usingFallback: () => true };
+    return { ok: false, applyState() {}, setTickMs() {}, setDestination() {}, usingFallback: () => true };
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
@@ -771,13 +884,20 @@ export function createScene(canvas, container, { onNote } = {}) {
     shockGeo: new THREE.RingGeometry(0.85, 1.0, 48),
     pipGeo: new THREE.SphereGeometry(0.16, 14, 10),
     pipKevGeo: new THREE.OctahedronGeometry(0.22),
+    trayGeo: new THREE.BoxGeometry(2.3, 0.2, 0.95),
+    trayMat: new THREE.MeshBasicMaterial({ color: 0x0a111c }),
     newGeo: new THREE.ConeGeometry(0.11, 0.24, 4),
     newMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
     pipMat: {
-      unpatched: new THREE.MeshBasicMaterial({ color: PIP_COLOR.unpatched }),
       patching: new THREE.MeshBasicMaterial({ color: PIP_COLOR.patching }),
       patched: new THREE.MeshBasicMaterial({ color: PIP_COLOR.patched }),
     },
+    dangerMat: {
+      low: new THREE.MeshBasicMaterial({ color: DANGER.low.color }),
+      medium: new THREE.MeshBasicMaterial({ color: DANGER.medium.color }),
+      high: new THREE.MeshBasicMaterial({ color: DANGER.high.color }),
+    },
+    breachMat: new Map(), // machine value -> SpriteMaterial, filled on first use
   };
 
   const nodes = [];
@@ -785,7 +905,7 @@ export function createScene(canvas, container, { onNote } = {}) {
     const nv = new NodeView(id, shared);
     nodes.push(nv);
     scene.add(nv.group);
-    nv.drawLabel(`NODE-${String(id).padStart(2, '0')}`, 0, 'healthy');
+    nv.drawLabel(`MACHINE ${String(id + 1).padStart(2, '0')}`, 0, 'healthy');
   }
 
   // Characters.
@@ -914,10 +1034,89 @@ export function createScene(canvas, container, { onNote } = {}) {
     lastPhase = phase;
   }
 
+  // Floating score changes ("+1.4 patch") from state.score_deltas. A small pool of sprites is
+  // reused, so a long match never allocates more than FLOAT_MAX canvases and textures.
+  const floats = [];
+  let lastDeltaTick = null;
+
+  function spawnFloat(nodeId, text, color, now, stack) {
+    let f = floats.find((x) => !x.active);
+    if (!f && floats.length < FLOAT_MAX) {
+      f = makeTextSprite(320, 76, 3.4, false);
+      f.sprite.renderOrder = 30;
+      f.sprite.visible = false;
+      f.active = false;
+      scene.add(f.sprite);
+      floats.push(f);
+    }
+    if (!f) f = floats.reduce((a, b) => (a.t0 <= b.t0 ? a : b)); // all busy: take the oldest
+    const { ctx, canvas, tex } = f;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    fitText(ctx, text, canvas.width - 44, 46, 700, FONT);
+    const w = Math.min(canvas.width - 8, ctx.measureText(text).width + 44);
+    roundRect(ctx, (canvas.width - w) / 2, 5, w, canvas.height - 10, 20);
+    ctx.fillStyle = color; // solid team colour, so it cannot be mistaken for a name tag
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(4, 7, 13, 0.9)';
+    ctx.stroke();
+    ctx.fillStyle = '#04101c';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2);
+    tex.needsUpdate = true;
+    const c = nodeCenter(nodeId);
+    f.x = c.x;
+    f.z = c.z + LABEL_Z;
+    f.y0 = LABEL_Y + 0.95 + stack * 0.95; // just above the name label, stacked when several land at once
+    f.t0 = now + stack * 110;
+    f.active = true;
+    f.mat.opacity = 0;
+    f.sprite.position.set(f.x, f.y0, f.z);
+    f.sprite.visible = true;
+  }
+
+  function applyDeltas(state, now) {
+    const list = Array.isArray(state.score_deltas) ? state.score_deltas : null; // absent on older servers
+    if (!list || !list.length) return;
+    if (state.tick != null && state.tick === lastDeltaTick) return; // same tick sent twice
+    lastDeltaTick = state.tick ?? null;
+    const perNode = new Map();
+    for (const d of list) {
+      if (!d || d.cause === 'held') continue; // the "Red +N / tick" label covers held income
+      const amount = Number(d.amount);
+      const nodeId = Number(d.node_id);
+      if (!Number.isFinite(amount) || amount === 0) continue;
+      if (d.node_id == null || !Number.isInteger(nodeId) || !nodes[nodeId]) continue;
+      const cause = FLOAT_CAUSE[d.cause] ?? String(d.cause ?? '').replace(/_/g, ' ').slice(0, 14);
+      const stack = perNode.get(nodeId) || 0;
+      if (stack >= 3) continue;
+      perNode.set(nodeId, stack + 1);
+      const color = d.team === 'red' ? FLOAT_COLOR.red : FLOAT_COLOR.blue;
+      spawnFloat(nodeId, `${formatAmount(amount)} ${cause}`.trim(), color, now, stack);
+    }
+  }
+
+  function updateFloats(now) {
+    for (const f of floats) {
+      if (!f.active) continue;
+      const k = (now - f.t0) / FLOAT_MS;
+      if (k >= 1) {
+        f.active = false;
+        f.sprite.visible = false;
+        continue;
+      }
+      if (k < 0) continue; // staggered start
+      f.mat.opacity = k < 0.12 ? k / 0.12 : k > 0.6 ? (1 - k) / 0.4 : 1;
+      f.sprite.position.y = f.y0 + 1.0 * (1 - (1 - k) * (1 - k));
+    }
+  }
+
   function applyState(state) {
     if (!state) return;
     try {
       applyNodes(state, performance.now());
+      applyDeltas(state, performance.now());
       if (!assetsSettled) pendingState = state;
       else applyActors(state);
     } catch (err) {
@@ -935,6 +1134,7 @@ export function createScene(canvas, container, { onNote } = {}) {
     const t = (now - t0) / 1000;
     shared.pipMat.patching.color.setHex(Math.sin(t * 9) > 0 ? PIP_COLOR.patching : 0x6b5200);
     for (const nv of nodes) nv.update(now, t);
+    updateFloats(now);
     for (const av of actors.values()) av.update(now, dt, t);
     renderer.render(scene, camera);
   });
@@ -943,13 +1143,103 @@ export function createScene(canvas, container, { onNote } = {}) {
   ro.observe(container);
   resize();
 
+  // ---- click a machine to walk there
+  // A click (not a drag) on a machine's pad or rack reports its id through onPick(nodeId, event).
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const pickTargets = nodes.flatMap((nv) => [nv.pad, nv.rack]);
+  let downAt = null;
+
+  function pickNode(e) {
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObjects(pickTargets, false)[0];
+    return hit ? hit.object.userData.nodeId : null;
+  }
+  function onPointerDown(e) {
+    downAt = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+  }
+  function onPointerUp(e) {
+    const d = downAt;
+    downAt = null;
+    if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;
+    const id = pickNode(e);
+    if (id !== null && id !== undefined && onPick) onPick(id, e);
+  }
+  let hoverAt = 0;
+  function onPointerMove(e) {
+    const now = performance.now();
+    if (now - hoverAt < 60) return;
+    hoverAt = now;
+    canvas.style.cursor = pickNode(e) === null ? '' : 'pointer';
+  }
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointerup', onPointerUp);
+  canvas.addEventListener('pointermove', onPointerMove);
+
+  // A ring in the player's colour on the machine that player is walking to.
+  const destRings = new Map(); // 'p1' | 'p2' -> mesh
+  function setDestination(playerId, nodeId) {
+    let ring = destRings.get(playerId);
+    if (nodeId === null || nodeId === undefined || !nodes[nodeId]) {
+      if (ring) ring.visible = false;
+      return;
+    }
+    if (!ring) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: ACTOR_TINT[playerId] ?? 0xffffff,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      ring = new THREE.Mesh(new THREE.RingGeometry(1.75, 2.0, 4), mat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.rotation.z = Math.PI / 4; // a square outline around the pad, unlike the round monitor ring
+      scene.add(ring);
+      destRings.set(playerId, ring);
+    }
+    const c = nodeCenter(nodeId);
+    ring.position.set(c.x, 0.1 + (playerId === 'p2' ? 0.02 : 0), c.z + 0.55);
+    ring.scale.setScalar(playerId === 'p2' ? 1.12 : 1);
+    ring.visible = true;
+  }
+
   return {
     ok: true,
     applyState,
+    setDestination,
     setTickMs(ms) {
       if (ms > 100) tickMs = ms;
     },
     usingFallback: () => fallback,
-    debug: { scene, camera, renderer, actors, nodes },
+    // Frees what this module allocates on demand (score-change sprites, breach labels).
+    dispose() {
+      renderer.setAnimationLoop(null);
+      ro.disconnect();
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      for (const ring of destRings.values()) {
+        scene.remove(ring);
+        ring.geometry.dispose();
+        ring.material.dispose();
+      }
+      destRings.clear();
+      for (const f of floats) {
+        scene.remove(f.sprite);
+        f.tex.dispose();
+        f.mat.dispose();
+      }
+      floats.length = 0;
+      for (const mat of shared.breachMat.values()) {
+        if (mat.map) mat.map.dispose();
+        mat.dispose();
+      }
+      shared.breachMat.clear();
+    },
+    debug: { scene, camera, renderer, actors, nodes, floats },
   };
 }

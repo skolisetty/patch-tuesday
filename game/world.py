@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config
+from .progress import LogTail, empty_progress, final_progress
 
 SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 MAPPING_SOURCES = {"kev_ctid", "cwe_capec", "heuristic", "none"}
@@ -243,7 +244,8 @@ class WorldManager:
     """Holds the current ServingData, watches world.json and runs advance.py in the background."""
 
     def __init__(self, serving_dir: Path | None = None, mock_dir: Path | None = None,
-                 advance_script: Path | None = None, poll_seconds: float = 1.0):
+                 advance_script: Path | None = None, poll_seconds: float = 1.0,
+                 progress_seconds: float = 0.5):
         self.serving_dir = Path(serving_dir or config.SERVING_DIR)
         self.mock_dir = Path(mock_dir or config.MOCK_DIR)
         self.advance_script = Path(advance_script or config.ADVANCE_SCRIPT)
@@ -257,6 +259,14 @@ class WorldManager:
         self._result_listeners: list = []   # callables(dict)
         self._poll_lock: asyncio.Lock | None = None
         self.advance_started: float | None = None   # time.monotonic() of the running advance
+        # Live progress of the running advance, read from the Bruin log advance.py streams to
+        # <repo>/logs/advance/. A background task refreshes _progress; the tick loop only copies it.
+        self.log_dir = self.advance_script.parent.parent / "logs" / "advance"
+        self.progress_seconds = progress_seconds
+        self._tail: LogTail | None = None
+        self._progress: dict | None = None
+        self._progress_task: asyncio.Task | None = None
+        self.final_progress: dict | None = None      # stage "done"/"failed" of the last advance
 
     def on_change(self, fn) -> None:
         self._listeners.append(fn)
@@ -309,6 +319,26 @@ class WorldManager:
                 pass
             await asyncio.sleep(self.poll_seconds)
 
+    # -- advance progress
+    def advance_progress(self) -> dict | None:
+        """The `world.advance` object while an advance runs, else None. No I/O."""
+        if not self.advancing:
+            return None
+        p = dict(self._progress or empty_progress())
+        if self.advance_started is not None:
+            p["seconds"] = round(time.monotonic() - self.advance_started, 1)
+        return p
+
+    async def _follow_log(self, tail: LogTail) -> None:
+        while self.advancing and self._tail is tail:
+            try:
+                self._progress = await asyncio.to_thread(tail.poll)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            await asyncio.sleep(self.progress_seconds)
+
     # -- advance
     def start_advance(self, day0: bool = False) -> dict:
         """Start scripts/advance.py in the background and return at once."""
@@ -321,6 +351,10 @@ class WorldManager:
             return res
         self.advancing = True
         self.advance_started = time.monotonic()
+        self._tail = LogTail(self.log_dir)
+        self._progress = empty_progress()
+        self.final_progress = None
+        self._progress_task = asyncio.get_running_loop().create_task(self._follow_log(self._tail))
         self._advance_task = asyncio.get_running_loop().create_task(self._run_advance(day0))
         return {"ok": True, "advancing": True, "message": "advance started"}
 
@@ -334,6 +368,16 @@ class WorldManager:
             if self.advance_started is not None:
                 result["seconds"] = round(time.monotonic() - self.advance_started, 1)
             self.last_result = result
+            try:                             # the last lines of the log, then the closing object
+                if self._tail is not None:
+                    self._progress = await asyncio.to_thread(self._tail.poll)
+            except Exception:
+                pass
+            ok = bool(result.get("ok"))
+            last = dict(self._progress or empty_progress())
+            last["seconds"] = result.get("seconds", last.get("seconds", 0.0))
+            self.final_progress = final_progress(
+                last, ok, f"The pipeline finished: data as of {result.get('asof_date')}." if ok else "")
             try:
                 await self.poll_once()       # load the new week before "advancing" goes false
             except Exception:
@@ -341,6 +385,10 @@ class WorldManager:
         finally:
             self.advancing = False
             self.advance_started = None
+            self._tail = None
+            if self._progress_task is not None:
+                self._progress_task.cancel()
+                self._progress_task = None
         for fn in self._result_listeners:
             fn(result)
         return result

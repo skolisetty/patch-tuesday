@@ -237,6 +237,11 @@ def test_unrevealed_red_is_fogged_in_the_state_message(serving):
     r = msg["ledger"][0]
     assert r["action"] == "UNSEEN" and r["node_id"] is None and r["cve_id"] is None and r["p_breach"] is None
     assert "CVE" not in r["reason_text"] and set(r) == set(row)
+    # Nothing but bookkeeping survives: score_source would say "this hidden red just attacked".
+    keep = {"ledger_id", "match_id", "world_asof", "pipeline_run_id", "model_version", "tick", "ts",
+            "actor_id", "team", "kind", "action", "outcome", "reason_text"}
+    assert all(r[k] is None for k in set(r) - keep), {k: r[k] for k in set(r) - keep if r[k] is not None}
+    assert r["outcome"] == "undetected" and r["reason_text"] == "Not seen by the defenders."
     assert row["node_id"] == 12                       # the stored row is untouched
     red.revealed_ticks = 2                             # detected: shown as it is
     msg = st.snapshot(s, [row])
@@ -260,6 +265,10 @@ def test_fog_never_shows_a_hidden_red_position_during_a_whole_match(serving):
                 hidden_seen += 1
                 assert a["node_id"] == real.last_seen_node and a["action"] == "WAIT"
                 assert all(r["action"] == "UNSEEN" for r in msg["ledger"] if r["actor_id"] == a["id"])
+                # every fogged row looks the same whatever the red really did
+                assert len({(r["score_source"], r["score_used"], r["cve_id"], r["node_id"], r["p_breach"],
+                             r["roll"], r["policy"], r["outcome"], r["reason_text"])
+                            for r in msg["ledger"] if r["action"] == "UNSEEN"}) <= 1
             else:
                 assert a["node_id"] == real.node_id
     assert hidden_seen > 0
@@ -323,10 +332,14 @@ def test_an_older_world_mid_match_drops_nothing(client, tmp_path, mock_dir):
         g._on_world_change(older)
         assert g.pending_world is None
         texts = []
-        for _ in range(10):
+        # On a loaded machine ticks sent before the call above are still queued, so read until
+        # the event shows up (at least 10 messages, at most 80) instead of exactly 10.
+        for i in range(80):
             m = _state(ws)
             texts += [e["text"] for e in m["events"]]
             assert m["world"]["asof_date"] == board
+            if i >= 9 and any("World data replaced" in t for t in texts):
+                break
         assert any("World data replaced" in t for t in texts)
         assert not any(e for e in texts if e.startswith("Patch Tuesday"))
         client.post("/api/match/reset")

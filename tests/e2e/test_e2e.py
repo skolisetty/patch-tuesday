@@ -57,10 +57,10 @@ def start_server(tmp: Path, port: int, tick: float = TICK) -> subprocess.Popen:
         "PYTHONUNBUFFERED": "1",
     })
     env.pop("PT_SERVING_DIR", None)
-    log = open(tmp / "server.log", "w", encoding="utf-8")
-    return subprocess.Popen([sys.executable, "-m", "uvicorn", "game.server:app", "--port", str(port),
-                             "--host", "127.0.0.1", "--ws-max-size", "4096"],
-                            cwd=str(ROOT), env=env, stdout=log, stderr=subprocess.STDOUT)
+    with open(tmp / "server.log", "w", encoding="utf-8") as log:    # the child keeps its own handle
+        return subprocess.Popen([sys.executable, "-m", "uvicorn", "game.server:app", "--port", str(port),
+                                 "--host", "127.0.0.1", "--ws-max-size", "4096"],
+                                cwd=str(ROOT), env=env, stdout=log, stderr=subprocess.STDOUT)
 
 
 def wait_up(base: str, proc: subprocess.Popen, timeout: float = 30.0) -> None:
@@ -189,28 +189,71 @@ def run_e2e() -> dict:
     out["actions_per_actor"] = acted
 
     # ---- human actions applied
+    # The state message with tick T is the board before tick T resolves; the rows of tick T ride on
+    # the message with tick T + 1. An input sent on seeing state T resolves as tick T, or one tick
+    # later when it reaches the server after that tick began (a loaded machine), or on the first
+    # free tick after a PATCH. So each fresh human row is matched to an input sent in the last few
+    # ticks and checked against the board the SERVER had, never against the client's clock.
     row_at = {(r["tick"], r["actor_id"]): r for r in rows}
+    state_at = {m["tick"]: m for m in match_states}
+    CONTINUES = ("working", "patched", "restored", "noop")      # later ticks of a multi-tick action
     checked = {"MOVE": 0, "MONITOR": 0, "PATCH": 0}
     applied = 0
     for player, sent in ((1, sent1), (2, sent2)):
         aid = f"p{player}"
-        for tick, node_before, act in sent:
-            r = row_at.get((tick, aid))      # the action sent after state tick T resolves as tick T
-            if r is None or r["action"] != act["action"]:
+        for r in rows:
+            if r["actor_id"] != aid or r["action"] == "WAIT" or r["outcome"] in CONTINUES:
                 continue
+            tick = r["tick"]
+            cands = [a for t, _, a in sent if tick - 3 <= t <= tick and a["action"] == r["action"]]
+            assert cands, f"{aid} did {r['action']} at tick {tick} but no such input was sent"
+            before = next(a for a in state_at[tick]["actors"] if a["id"] == aid)["node_id"]
+            if r["action"] == "MOVE":
+                assert r["outcome"] == "moved", r
+                assert r["node_id"] in [nxt(before, a["dir"]) for a in cands], (before, cands, r)
+            elif r["action"] == "MONITOR":
+                assert r["outcome"] == "monitoring" and r["node_id"] == before, r
+                assert state_at[tick + 1]["nodes"][before]["monitored"] is True
+            elif r["action"] == "PATCH":
+                assert r["cve_id"] in [a["cve"] for a in cands], (cands, r)
+                after = next((c for c in state_at[tick + 1]["nodes"][before]["cards"]
+                              if c["cve_id"] == r["cve_id"]), None)
+                if r["outcome"] in ("patching", "patched"):                # exactly that card
+                    assert after is not None and after["patch_state"] in ("patching", "patched"), (r, after)
+                else:
+                    # refused, never misapplied: the player had walked on, or another defender took
+                    # that card first (the other human resolves earlier in the same tick)
+                    assert r["outcome"] == "invalid", r
+                    assert after is None or after["patch_state"] != "unpatched", (r, after)
             applied += 1
-            if act["action"] == "MOVE":
-                assert r["outcome"] == "moved" and r["node_id"] == nxt(node_before, act["dir"]), (act, r)
-            elif act["action"] == "MONITOR":
-                after = next(m for m in match_states if m["tick"] == tick + 1)
-                assert r["outcome"] == "monitoring" and after["nodes"][node_before]["monitored"] is True
-            elif act["action"] == "PATCH":
-                assert r["cve_id"] == act["cve"] and r["outcome"] in ("patching", "patched"), (act, r)
-            checked[act["action"]] += 1
+            checked[r["action"]] += 1
     total_sent = len(sent1) + len(sent2)
-    assert total_sent > 40 and applied >= 0.9 * total_sent, (applied, total_sent)
+    # a late input can be replaced by the next key press (the server keeps the latest per player)
+    assert total_sent > 40 and applied >= 0.75 * total_sent, (applied, total_sent)
     assert all(checked[k] > 0 for k in checked), checked
     out["human_actions"] = {"sent": total_sent, "applied": applied, "checked": checked}
+
+    # ---- the "explain itself" additions, end to end on the real data
+    fb_seen = 0
+    for m in match_states:
+        for f in m["player_feedback"]:
+            r = row_at[(m["tick"] - 1, f"p{f['player']}")]
+            assert (r["action"], r["outcome"]) == (f["action"], f["outcome"]), (f, r)
+            fb_seen += 1
+    assert fb_seen >= applied                      # every fresh action got a sentence (plus completions)
+    deltas = [d for m in match_states for d in m["score_deltas"]]
+    final = match_states[-1]["score"]
+    for team in ("red", "blue"):
+        assert abs(sum(d["amount"] for d in deltas if d["team"] == team) - final[team]) < 0.01, team
+        assert abs(sum(final["breakdown"][team].values()) - final[team]) < 0.02, team
+    assert all(m["reveal"] is None for m in match_states[:-1])
+    reveal = match_states[-1]["reveal"]
+    assert reveal is not None and reveal["n_cards"] > 0, "serving/reveal.json should give a reveal"
+    w = match_states[-1]["world"]
+    assert w["pipeline_run_id"] and w["n_cves_visible"] and w["advance"] is None
+    out["explain"] = {"feedback": fb_seen, "deltas": len(deltas), "breakdown": final["breakdown"],
+                      "reveal": {k: reveal[k] for k in ("n_cards", "n_real")},
+                      "fates": sorted(i["fate"] for i in reveal["items"])}
 
     # ---- the ledger reached DuckDB and JSONL
     con = duckdb.connect(str(tmp / "game.duckdb"), read_only=True)
@@ -304,7 +347,9 @@ async def _hardening(base: str, url: str) -> dict:
 
 def run_hardening() -> dict:
     port = free_port()
-    with tempfile.TemporaryDirectory() as d:
+    # sys.executable in a venv is a launcher: the real interpreter can hold server.log for a moment
+    # after terminate(), so a failed delete of the temp folder must not fail the test (Windows).
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
         proc = start_server(tmp, port, tick=0.05)
         try:

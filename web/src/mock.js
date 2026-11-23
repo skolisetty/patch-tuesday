@@ -1,7 +1,8 @@
 // Mock mode (?mock=1): a small local simulation that emits messages in the
 // exact shapes of docs/CONTRACTS.md, so the client can be developed and
 // shown without the game server. All CVE ids, vendors and titles here are
-// invented placeholders, not real vulnerability data.
+// invented placeholders, not real vulnerability data, and every number
+// (hits, counts, reveal dates) is made up.
 
 const COLS = 5;
 const ROWS = 4;
@@ -23,6 +24,24 @@ const TECHNIQUES = [
   ['T1133', 'persistence'],
 ];
 
+// The assets one mock "Advance week" walks through, in pipeline order. The schema prefix is
+// the stage shown on the pipeline strip (sim.* counts as serve, ml.eval_metrics is the gate).
+const ADVANCE_ASSETS = [
+  'landing.nvd_cves', 'landing.cisa_kev', 'landing.epss_scores', 'landing.attack_techniques', 'landing.cwe_catalog', 'landing.vendor_advisories',
+  'raw.nvd_cves', 'raw.cisa_kev', 'raw.epss_scores', 'raw.attack_techniques', 'raw.cwe_catalog',
+  'stg.cves', 'stg.kev', 'stg.epss', 'stg.techniques',
+  'feat.cve_text', 'feat.vendor_history', 'feat.snapshot_features', 'feat.labels',
+  'ml.train_challenger', 'ml.score_candidates', 'ml.eval_metrics',
+  'serve.patch_priority', 'serve.cards', 'sim.world_clock', 'sim.reveal',
+];
+const STAGES = ['landing', 'raw', 'stg', 'feat', 'ml', 'gate', 'serve'];
+
+function stageOf(asset) {
+  if (asset === 'ml.eval_metrics') return 'gate';
+  const prefix = asset.split('.')[0];
+  return prefix === 'sim' ? 'serve' : prefix;
+}
+
 function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
@@ -35,6 +54,8 @@ function mulberry32(seed) {
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const pct = (v) => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
+const pts = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
 function addDays(iso, days) {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -42,8 +63,8 @@ function addDays(iso, days) {
   return d.toISOString().slice(0, 10);
 }
 
-export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 150, autostart = true }) {
-  let rng = mulberry32(20260322);
+export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 150, autostart = true, seed = 20260322 }) {
+  const rng = mulberry32(seed);
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
   let cardSeq = 0;
   let ledgerSeq = 0;
@@ -52,6 +73,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
   let closed = false;
   const pendingActs = { 1: null, 2: null };
 
+  // Before the first advance the mock world has no gate result, like old serving files.
   const world = {
     asof_date: '2026-03-22',
     score_source: 'epss',
@@ -59,13 +81,25 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     challenger_p_at_50: null,
     epss_p_at_50: null,
     advancing: false,
+    pipeline_run_id: null,
+    gate_passed: false,
+    challenger_hits_at_50: null,
+    epss_hits_at_50: null,
+    n_positives: null,
+    n_candidates: null,
+    n_cves_visible: 187217,
+    n_new_cves_this_week: null,
   };
-  let advanceAtTick = null; // tick at which a running advance lands
+  let adv = null; // { startedAt, done } while an advance runs
+  let advTimer = null;
+  let advLanded = false; // every asset done; lands on the next tick of a running match
   let campaignAtTick = null;
   let campaignLeft = 0;
-  let priorityPool = [];
 
   let st = null;
+  // Filled while one tick is computed.
+  let deltas = [];
+  let feedback = [];
 
   function newCard(isNew) {
     cardSeq += 1;
@@ -84,6 +118,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
       tactic: tech[1],
       priority_rank: null,
       attempted: false,
+      fate: null, // { fate, by, tick } once patched or used in a breach
     };
   }
 
@@ -113,6 +148,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
         monitored: false,
         monitorLeft: 0,
         isolateLeft: 0,
+        wasBreached: false, // state to return to when isolation ends
         breachedOnce: false,
         cards: Array.from({ length: count }, () => newCard(false)),
       });
@@ -120,7 +156,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     const actor = (id, name, team, kind, role, node_id) => ({
       id, name, team, kind, role, node_id,
       action: 'WAIT', target_node: null, revealed: true, busy_ticks: 0,
-      job: null, revealLeft: 0, scanned: new Set(),
+      job: null, revealLeft: 0, scanned: new Set(), lastSeen: node_id,
     });
     st = {
       match_id: `m-mock-${matchSeq}`,
@@ -128,21 +164,35 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
       tick: 0,
       ticks_total: ticksTotal,
       nodes,
+      // Same ids, names and roles as the real server (game/state.py ACTOR_DEFS).
       actors: [
         actor('red1', 'Opportunist', 'red', 'agent', 'opportunist', 4),
-        actor('red2', 'Stalker', 'red', 'agent', 'targeted', 15),
-        actor('blue1', 'Triage', 'blue', 'agent', 'patcher', 7),
-        actor('blue2', 'Sentinel', 'blue', 'agent', 'monitor', 11),
-        actor('blue3', 'Medic', 'blue', 'agent', 'responder', 13),
+        actor('red2', 'Patient', 'red', 'agent', 'patient', 15),
+        actor('blue1', 'Triage', 'blue', 'agent', 'triage', 7),
+        actor('blue2', 'Patcher', 'blue', 'agent', 'patcher', 11),
+        actor('blue3', 'Hunter', 'blue', 'agent', 'hunter', 13),
         actor('p1', 'Player 1', 'blue', 'human', 'human', 6),
         actor('p2', 'Player 2', 'blue', 'human', 'human', 8),
       ],
       score: { red: 0, blue: 0, breaches_total: 0, breaches_in_top50: 0 },
+      breakdown: { blue: { patch: 0, restore: 0, isolate_cost: 0 }, red: { first_breach: 0, held: 0 } },
+      reveal: null,
     };
-    advanceAtTick = null;
     campaignAtTick = null;
     campaignLeft = 0;
     rerank();
+  }
+
+  // Every score change goes through here, so score, breakdown and score_deltas always agree.
+  function addScore(team, amount, cause, node_id, actor_id = null, cve_id = null) {
+    if (!amount) return;
+    st.score[team] += amount;
+    st.breakdown[team][cause] += amount;
+    deltas.push({ team, amount: Number(amount.toFixed(4)), cause, node_id, actor_id, cve_id });
+  }
+
+  function say(a, action, outcome, ok, text) {
+    if (a.kind === 'human') feedback.push({ player: a.id === 'p1' ? 1 : 2, action, outcome, ok, text });
   }
 
   function neighbours(id) {
@@ -186,19 +236,21 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
   }
 
   const REASONS = {
-    EXPLOIT: (c) => `Chose the card with the best breach odds on this node (score ${(c.score * 100).toFixed(1)}%).`,
-    SCAN: () => 'Scanning first raises the odds of the next attempt here.',
-    PATCH: (c) => `Highest-priority unpatched card on this node${c.priority_rank ? ` (rank ${c.priority_rank})` : ''}.`,
-    RESTORE: () => 'This node is compromised and bleeding points every tick.',
-    MONITOR: () => 'High-value node with risky cards: halve the breach odds.',
-    ISOLATE: () => 'Cutting the node off while the patch backlog is cleared.',
-    MOVE: () => 'Heading for the node with the most risk left on it.',
-    PIVOT: () => 'Using the compromised node as a stepping stone.',
+    EXPLOIT: (c) => `Chose the card with the best breach chance on this machine (danger ${pct(c.score)}).`,
+    SCAN: () => 'Scanning first raises the breach chance of the next attempt here.',
+    PATCH: (c) => `Highest-priority unpatched card on this machine${c.priority_rank ? ` (priority #${c.priority_rank})` : ''}.`,
+    RESTORE: () => 'This machine is breached and bleeding points every tick.',
+    MONITOR: () => 'High-value machine with risky cards: halve the breach chance.',
+    ISOLATE: () => 'Cutting the machine off while the patch backlog is cleared.',
+    MOVE: () => 'Heading for the machine with the most risk left on it.',
+    PIVOT: () => 'Using the breached machine as a stepping stone.',
     WAIT: () => 'Nothing useful to do this tick.',
   };
 
   function step() {
     st.tick += 1;
+    deltas = [];
+    feedback = [];
     const rows = [];
     const events = [];
     const lateReasons = [];
@@ -207,16 +259,18 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     // Node timers.
     for (const n of st.nodes) {
       if (n.monitorLeft > 0 && --n.monitorLeft === 0) n.monitored = false;
-      if (n.isolateLeft > 0 && --n.isolateLeft === 0 && n.state === 'isolated') n.state = 'healthy';
+      if (n.isolateLeft > 0 && --n.isolateLeft === 0 && n.state === 'isolated') {
+        n.state = n.wasBreached ? 'compromised' : 'healthy';
+      }
     }
 
     // Scripted world advance: gate, drop, then a red campaign.
-    if (st.tick === 8 && advanceAtTick === null && !world.advancing) startAdvance(events);
-    if (advanceAtTick !== null && st.tick >= advanceAtTick) landAdvance(events);
+    if (st.tick === 8 && !world.advancing) startAdvance(events);
+    if (advLanded) landAdvance(events);
     if (campaignAtTick !== null && st.tick >= campaignAtTick) {
       campaignAtTick = null;
       campaignLeft = 12;
-      events.push({ kind: 'campaign', text: 'Red agents pivot onto this week\'s freshest high-score cards.' });
+      events.push({ kind: 'campaign', text: 'Red agents pivot onto this week\'s freshest high-danger cards.' });
     }
     if (campaignLeft > 0) campaignLeft -= 1;
 
@@ -224,7 +278,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
       const node = nodeById(a.node_id);
       let action = 'WAIT';
       let card = null;
-      let outcome = 'ok';
+      let outcome = 'waiting';
       let p = null;
       let roll = null;
       a.target_node = null;
@@ -234,21 +288,29 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
         const job = a.job;
         a.job = null;
         if (job.action === 'PATCH' && job.card) {
-          job.card.patch_state = 'patched';
-          if (!job.card.attempted) st.score.blue += node.value * job.card.score;
+          const c = job.card;
+          c.patch_state = 'patched';
+          if (!c.fate) c.fate = { fate: 'patched', by: a.name, tick: st.tick };
           outcome = 'patched';
-          events.push({ kind: 'patched', text: `${a.name} patched ${job.card.cve_id} on ${node.name}.` });
+          if (!c.attempted) {
+            const gain = node.value * c.score;
+            addScore('blue', gain, 'patch', node.id, a.id, c.cve_id);
+            say(a, 'PATCH', 'patched', true, `Patched ${c.cve_id}: +${pts(gain)} (machine value ${node.value} x danger ${pct(c.score)}).`);
+          } else {
+            say(a, 'PATCH', 'patched', true, `Patched ${c.cve_id}: Red had already attacked it, so no points. It can no longer be used.`);
+          }
+          events.push({ kind: 'patched', text: `${a.name} patched ${c.cve_id} on ${node.name}.` });
         } else if (job.action === 'RESTORE') {
           if (node.state === 'compromised') {
             node.state = 'healthy';
-            st.score.blue += 3;
+            addScore('blue', 3, 'restore', node.id, a.id);
             events.push({ kind: 'restored', text: `${a.name} restored ${node.name}.` });
+            say(a, 'RESTORE', 'restored', true, `Restored ${node.name}: +3, and Red stops earning ${node.value} per tick here.`);
+            outcome = 'restored';
+          } else {
+            say(a, 'RESTORE', 'noop', false, `${node.name} was no longer breached when the restore finished. No points.`);
+            outcome = 'noop';
           }
-          outcome = 'restored';
-        } else if (job.action === 'MONITOR') {
-          outcome = 'monitoring';
-        } else if (job.action === 'ISOLATE') {
-          outcome = 'isolated';
         }
       };
 
@@ -256,35 +318,63 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
         action = act;
         card = c || null;
         a.job = { action: act, left: ticks - 1, card: c || null };
-        outcome = 'started';
-        if (act === 'PATCH' && c) c.patch_state = 'patching';
-        if (act === 'MONITOR') {
-          node.monitored = true;
-          node.monitorLeft = 8;
+        a.target_node = node.id;
+        if (act === 'PATCH' && c) {
+          c.patch_state = 'patching';
+          outcome = 'patching';
+          say(a, 'PATCH', 'patching', true, `Patching ${c.cve_id} (${ticks} ticks).`);
         }
-        if (act === 'ISOLATE') {
-          node.state = 'isolated';
-          node.isolateLeft = 5;
+        if (act === 'RESTORE') {
+          outcome = 'restoring';
+          say(a, 'RESTORE', 'restoring', true, `Restoring ${node.name} (${ticks} ticks).`);
         }
         if (a.job.left <= 0) finishJob();
+      };
+
+      const monitor = () => {
+        action = 'MONITOR';
+        a.target_node = node.id;
+        node.monitored = true;
+        node.monitorLeft = 3;
+        outcome = 'monitoring';
+        say(a, 'MONITOR', 'monitoring', true, `Monitoring ${node.name} for 3 ticks: breach chance here is halved and a failed attack can reveal the attacker.`);
+      };
+
+      const isolate = () => {
+        action = 'ISOLATE';
+        a.target_node = node.id;
+        if (node.state === 'isolated') {
+          outcome = 'invalid';
+          say(a, 'ISOLATE', 'invalid', false, `${node.name} is already isolated.`);
+          return;
+        }
+        node.wasBreached = node.state === 'compromised';
+        node.state = 'isolated';
+        node.isolateLeft = 5;
+        outcome = 'isolated';
+        say(a, 'ISOLATE', 'isolated', true, `Isolated ${node.name} for 5 ticks: nothing can breach it, but it costs 1 point per tick.`);
       };
 
       const move = (to) => {
         action = 'MOVE';
         a.target_node = to;
-        if (to !== a.node_id && neighbours(a.node_id).includes(to)) {
+        if (to !== null && to !== a.node_id && neighbours(a.node_id).includes(to)) {
           a.node_id = to;
           outcome = 'moved';
+          say(a, 'MOVE', 'moved', true, `Moved to ${nodeById(to).name}.`);
         } else {
+          a.target_node = null;
           outcome = 'blocked';
+          say(a, 'MOVE', 'blocked', false, "Can't move: that is the edge of the network.");
         }
       };
 
       if (a.job) {
-        // A busy player cannot act; drop any key press for this tick.
+        // The server keeps a busy player's newest key press; the mock simply drops it.
         if (a.kind === 'human') pendingActs[a.id === 'p1' ? 1 : 2] = null;
         action = a.job.action;
         card = a.job.card;
+        a.target_node = node.id;
         a.job.left -= 1;
         outcome = 'working';
         if (a.job.left <= 0) finishJob();
@@ -302,18 +392,19 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
           if (roll < p) {
             node.state = 'compromised';
             outcome = 'breach';
+            card.fate = { fate: 'breached', by: a.name, tick: st.tick };
             st.score.breaches_total += 1;
             if (card.priority_rank !== null && card.priority_rank <= 50) st.score.breaches_in_top50 += 1;
             if (!node.breachedOnce) {
               node.breachedOnce = true;
-              st.score.red += 5;
+              addScore('red', 5, 'first_breach', node.id, a.id, card.cve_id);
             }
             a.revealed = true;
             a.revealLeft = 3;
             events.push({ kind: 'breach', text: `${a.name} breached ${node.name} via ${card.cve_id}.` });
           } else {
             outcome = 'failed';
-            if (node.monitored && rng() < 0.6) {
+            if (node.monitored && rng() < 0.8) {
               a.revealed = true;
               a.revealLeft = 3;
               events.push({ kind: 'intel', text: `${a.name} was spotted on monitored ${node.name}.` });
@@ -333,12 +424,12 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
           const to = goal !== null && goal !== a.node_id ? stepToward(a.node_id, goal) : pick(neighbours(a.node_id));
           if (rng() < 0.12) {
             action = 'WAIT';
-            outcome = 'ok';
+            outcome = 'waiting';
           } else if (node.state === 'compromised' && rng() < 0.3) {
             action = 'PIVOT';
             a.target_node = to;
             a.node_id = to;
-            outcome = 'moved';
+            outcome = 'pivoted';
           } else {
             move(to);
           }
@@ -351,11 +442,11 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
         } else if (best && node.state === 'healthy' && r < 0.65) {
           startJob('PATCH', 2, best);
         } else if (node.state === 'healthy' && !node.monitored && node.value >= 3 && r < 0.75) {
-          startJob('MONITOR', 3);
+          monitor();
         } else {
           const bad = st.nodes.filter((n) => n.state === 'compromised');
           const risky = st.nodes.filter((n) => n.state === 'healthy' && n.cards.some((c) => c.patch_state === 'unpatched' && c.score > 0.1));
-          const goalNode = a.role === 'responder' && bad.length ? pick(bad) : risky.length ? pick(risky) : null;
+          const goalNode = a.role === 'hunter' && bad.length ? pick(bad) : risky.length ? pick(risky) : null;
           if (goalNode && goalNode.id !== a.node_id) move(stepToward(a.node_id, goalNode.id));
           else if (rng() < 0.6) move(pick(neighbours(a.node_id)));
         }
@@ -370,28 +461,26 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
             const x = a.node_id % COLS;
             const okX = !(act.dir === 'W' && x === 0) && !(act.dir === 'E' && x === COLS - 1);
             const to = a.node_id + (delta || 0);
-            if (delta && okX && to >= 0 && to < COLS * ROWS) move(to);
-            else {
-              action = 'MOVE';
-              outcome = 'blocked';
-            }
+            move(delta && okX && to >= 0 && to < COLS * ROWS ? to : null);
           } else if (act.action === 'PATCH') {
             const list = sortedCards(node).filter((c) => c.patch_state === 'unpatched');
             const chosen = (act.cve && list.find((c) => c.cve_id === act.cve)) || list[0];
-            if (chosen && node.state !== 'isolated') startJob('PATCH', 2, chosen);
+            if (chosen) startJob('PATCH', 2, chosen);
             else {
               action = 'PATCH';
-              outcome = 'nothing to patch';
+              outcome = 'invalid';
+              say(a, 'PATCH', 'invalid', false, 'Nothing left to patch on this machine.');
             }
           } else if (act.action === 'MONITOR') {
-            startJob('MONITOR', 3);
+            monitor();
           } else if (act.action === 'ISOLATE') {
-            startJob('ISOLATE', 5);
+            isolate();
           } else if (act.action === 'RESTORE') {
             if (node.state === 'compromised') startJob('RESTORE', 3);
             else {
               action = 'RESTORE';
-              outcome = 'not compromised';
+              outcome = 'invalid';
+              say(a, 'RESTORE', 'invalid', false, 'Nothing to restore: this machine is not breached.');
             }
           }
         }
@@ -399,17 +488,19 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
 
       a.action = action;
       a.busy_ticks = a.job ? a.job.left : 0;
+      if (a.team !== 'red' || a.revealed) a.lastSeen = a.node_id;
 
       ledgerSeq += 1;
       const ledger_id = `${st.match_id}-${st.tick}-${a.id}-${ledgerSeq}`;
       const reason = (REASONS[action] || REASONS.WAIT)(card || { score: 0 });
-      const late = a.kind === 'agent' && action !== 'WAIT' && rng() < 0.6;
+      const hiddenRed = a.team === 'red' && !a.revealed;
+      const late = a.kind === 'agent' && action !== 'WAIT' && !hiddenRed && rng() < 0.6;
       if (late) lateReasons.push({ ledger_id, reason_text: reason });
-      rows.push({
+      const row = {
         ledger_id,
         match_id: st.match_id,
         world_asof: world.asof_date,
-        pipeline_run_id: 'mock-run',
+        pipeline_run_id: world.pipeline_run_id || 'mock-run',
         model_version: world.model_version,
         tick: st.tick,
         ts: new Date().toISOString(),
@@ -428,18 +519,28 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
         reason_text: late ? null : a.kind === 'human' ? 'Player input.' : reason,
         llm_model: late ? 'mock-llm' : null,
         llm_latency_ms: late ? 800 : null,
-      });
+      };
+      // Fog of war, as on the real server: an attacker nobody has seen leaves a blank row.
+      rows.push(hiddenRed ? {
+        ...row, action: 'UNSEEN', node_id: null, cve_id: null, score_used: null, p_breach: null, roll: null,
+        outcome: 'undetected', policy: null, llm_model: null, llm_latency_ms: null, reason_text: 'Not seen by the defenders.',
+      } : row);
     }
 
     // Per-tick scoring.
     for (const n of st.nodes) {
-      if (n.state === 'compromised') st.score.red += n.value;
-      if (n.state === 'isolated') st.score.blue -= 1;
+      if (n.state === 'compromised') addScore('red', n.value, 'held', n.id);
+      if (n.state === 'isolated') addScore('blue', -1, 'isolate_cost', n.id);
     }
 
     if (st.tick >= st.ticks_total) {
       st.phase = 'ended';
+      st.reveal = buildReveal();
+      for (const a of st.actors) a.revealed = true;
       events.push({ kind: 'info', text: 'Match over.' });
+      if (st.reveal.n_real) {
+        events.push({ kind: 'info', text: `Reveal: ${st.reveal.n_real} of this board's ${st.reveal.n_cards} cards became known exploited within 91 days.` });
+      }
       stopTimer();
     }
 
@@ -451,29 +552,100 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     }
   }
 
+  // "What really happened": which board cards "became known exploited" after this date (invented).
+  function buildReveal() {
+    const items = [];
+    let nCards = 0;
+    for (const n of st.nodes) {
+      for (const c of n.cards) {
+        nCards += 1;
+        if (c.in_kev || c.score < 0.12 || (c.card_id * 7) % 10 >= 4) continue;
+        const days = 5 + ((c.card_id * 13) % 80);
+        const f = c.fate || { fate: 'open', by: null, tick: null };
+        items.push({
+          cve_id: c.cve_id, title: c.title, node_id: n.id, node_name: n.name,
+          kev_date_added: addDays(world.asof_date, days), days_after_asof: days,
+          priority_rank: c.priority_rank, score: c.score, score_source: world.score_source,
+          in_kev_at_asof: false, fate: f.fate, by: f.by, tick: f.tick,
+        });
+      }
+    }
+    items.sort((a, b) => a.kev_date_added.localeCompare(b.kev_date_added));
+    return { n_cards: nCards, n_real: items.length, horizon_days: 91, items };
+  }
+
+  // -------------------------------------------------------- world advance
+
+  function advancePublic() {
+    if (!adv) return null;
+    const total = ADVANCE_ASSETS.length;
+    const current = ADVANCE_ASSETS[Math.min(adv.done, total - 1)];
+    const done = adv.done >= total;
+    const stage = done ? 'done' : stageOf(current);
+    return {
+      stage,
+      stage_index: done ? STAGES.length - 1 : STAGES.indexOf(stage),
+      assets_done: Math.min(adv.done, total),
+      assets_total: total,
+      current: done ? null : current,
+      seconds: Number(((performance.now() - adv.startedAt) / 1000).toFixed(1)),
+      message: done ? 'Pipeline run finished.' : `Running ${current}`,
+    };
+  }
+
   function startAdvance(events) {
     if (world.advancing) return;
     world.advancing = true;
-    advanceAtTick = st.phase === 'running' ? st.tick + 5 : null;
-    events.push({ kind: 'info', text: 'Pipeline run started for the next world week.' });
+    advLanded = false;
+    adv = { startedAt: performance.now(), done: 0 };
+    events.push({ kind: 'info', text: 'Advance week: Bruin started the pipeline run for the next week.' });
+    clearInterval(advTimer);
+    // The real run takes about a minute; the mock walks one asset per beat.
+    advTimer = setInterval(() => {
+      if (closed || !adv) return;
+      adv.done += 1;
+      if (adv.done >= ADVANCE_ASSETS.length) {
+        clearInterval(advTimer);
+        advTimer = null;
+        if (st.phase === 'running') {
+          advLanded = true; // the next tick lands it
+        } else {
+          const ev = [];
+          landAdvance(ev);
+          emitState([], ev);
+        }
+      } else if (st.phase !== 'running') {
+        emitState(); // no ticks outside a match: publish the progress ourselves
+      }
+    }, clamp(Math.round(tickMs / 4), 80, 500));
   }
 
   function landAdvance(events) {
-    advanceAtTick = null;
+    advLanded = false;
+    adv = null;
     world.advancing = false;
     world.asof_date = addDays(world.asof_date, 7);
-    const epss = Number((0.14 + rng() * 0.06).toFixed(2));
+    const positives = 28 + Math.floor(rng() * 14);
+    const epssHits = Math.floor(rng() * 3);
     const passed = rng() < 0.75;
-    const model = Number((passed ? epss + 0.04 + rng() * 0.08 : epss - rng() * 0.04).toFixed(2));
-    world.epss_p_at_50 = epss;
-    world.challenger_p_at_50 = model;
+    const modelHits = passed ? epssHits + 1 + Math.floor(rng() * 3) : Math.max(0, epssHits - Math.floor(rng() * 2));
+    world.epss_hits_at_50 = epssHits;
+    world.challenger_hits_at_50 = modelHits;
+    world.epss_p_at_50 = epssHits / 50;
+    world.challenger_p_at_50 = modelHits / 50;
+    world.n_positives = positives;
+    world.n_candidates = 172000 + Math.floor(rng() * 2000);
+    world.n_new_cves_this_week = 1200 + Math.floor(rng() * 900);
+    world.n_cves_visible += world.n_new_cves_this_week;
+    world.pipeline_run_id = `mock_${world.asof_date.replace(/-/g, '_')}_13_24_43`;
+    world.gate_passed = passed;
     world.score_source = passed ? 'model' : 'epss';
     world.model_version = passed ? `hgb-${world.asof_date}` : null;
     events.push({
       kind: 'gate',
       text: passed
-        ? `Gate passed: challenger P@50 ${model.toFixed(2)} beats EPSS ${epss.toFixed(2)}. Model promoted.`
-        : `Gate failed: challenger P@50 ${model.toFixed(2)} vs EPSS ${epss.toFixed(2)}. Staying on EPSS.`,
+        ? `Gate passed: our model put ${modelHits} of the ${positives} soon-to-be-exploited bugs in its top 50; the EPSS baseline put ${epssHits}. Our model (${world.model_version}) now sets the danger scores.`
+        : `Gate blocked: our model ${modelHits}, EPSS baseline ${epssHits} (of ${positives}). EPSS stays.`,
     });
     if (st.phase === 'running') {
       for (const n of st.nodes) for (const c of n.cards) c.is_new = false;
@@ -489,16 +661,24 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     }
   }
 
+  // --------------------------------------------------------------- output
+
   function publicState(rows, events) {
     const counts = { healthy: 0, compromised: 0, isolated: 0 };
-    for (const n of st.nodes) counts[n.state] += 1;
+    let redRate = 0;
+    for (const n of st.nodes) {
+      counts[n.state] += 1;
+      if (n.state === 'compromised') redRate += n.value;
+    }
+    const fog = st.phase === 'running';
+    const round = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Number(v.toFixed(2))]));
     return {
       t: 'state',
       match_id: st.match_id,
       phase: st.phase,
       tick: st.tick,
       ticks_total: st.ticks_total,
-      world: { ...world },
+      world: { ...world, advance: advancePublic() },
       nodes: st.nodes.map((n) => ({
         id: n.id, x: n.x, y: n.y, name: n.name, value: n.value, state: n.state, monitored: n.monitored,
         cards: n.cards.map((c) => ({
@@ -507,19 +687,24 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
           priority_rank: c.priority_rank,
         })),
       })),
-      actors: st.actors.map((a) => ({
-        id: a.id, name: a.name, team: a.team, kind: a.kind, role: a.role, node_id: a.node_id,
-        action: a.action, target_node: a.target_node, revealed: a.revealed, busy_ticks: a.busy_ticks,
-      })),
+      // With fog, an unrevealed attacker shows only where it was last seen, doing nothing.
+      actors: st.actors.map((a) => (fog && a.team === 'red' && !a.revealed
+        ? { id: a.id, name: a.name, team: a.team, kind: a.kind, role: a.role, node_id: a.lastSeen, action: 'WAIT', target_node: null, revealed: false, busy_ticks: 0 }
+        : { id: a.id, name: a.name, team: a.team, kind: a.kind, role: a.role, node_id: a.node_id, action: a.action, target_node: a.target_node, revealed: a.revealed, busy_ticks: a.busy_ticks })),
       score: {
-        red: st.score.red,
+        red: Number(st.score.red.toFixed(2)),
         blue: Number(st.score.blue.toFixed(2)),
         healthy: counts.healthy,
         compromised: counts.compromised,
         isolated: counts.isolated,
         breaches_total: st.score.breaches_total,
         breaches_in_top50: st.score.breaches_in_top50,
+        rate: { red: redRate, blue: -counts.isolated },
+        breakdown: { blue: round(st.breakdown.blue), red: round(st.breakdown.red) },
       },
+      score_deltas: deltas,
+      player_feedback: feedback,
+      reveal: st.phase === 'ended' ? st.reveal : null,
       ledger: rows,
       events,
     };
@@ -531,8 +716,11 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     onMessage(JSON.parse(JSON.stringify(msg)));
   }
 
+  // Deltas and feedback belong to one tick only: they go out once.
   function emitState(rows = [], events = []) {
     emit(publicState(rows, events));
+    deltas = [];
+    feedback = [];
   }
 
   function stopTimer() {
@@ -560,15 +748,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     if (world.advancing) return;
     const events = [];
     startAdvance(events);
-    if (st.phase !== 'running') {
-      emitState([], events);
-      setTimeout(() => {
-        if (closed || !world.advancing) return;
-        const ev = [];
-        landAdvance(ev);
-        emitState([], ev);
-      }, Math.max(1500, tickMs * 2));
-    }
+    if (st.phase !== 'running') emitState([], events);
   }
 
   function send(msg) {
@@ -599,6 +779,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     close() {
       closed = true;
       stopTimer();
+      clearInterval(advTimer);
     },
     mode: 'mock',
   };

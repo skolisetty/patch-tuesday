@@ -5,13 +5,25 @@ import re
 
 from game import match, state as st
 
-TOP = {"t", "match_id", "phase", "tick", "ticks_total", "world", "nodes", "actors", "score", "ledger", "events"}
-WORLD = {"asof_date", "score_source", "model_version", "challenger_p_at_50", "epss_p_at_50", "advancing"}
+TOP = {"t", "match_id", "phase", "tick", "ticks_total", "world", "nodes", "actors", "score", "ledger", "events",
+       "score_deltas", "player_feedback", "reveal"}
+WORLD = {"asof_date", "score_source", "model_version", "challenger_p_at_50", "epss_p_at_50", "advancing",
+         "pipeline_run_id", "gate_passed", "challenger_hits_at_50", "epss_hits_at_50", "n_positives",
+         "n_candidates", "n_cves_visible", "n_new_cves_this_week", "advance"}
+ADVANCE = {"stage", "stage_index", "assets_done", "assets_total", "current", "seconds", "message"}
+ADVANCE_STAGES = {None, "landing", "raw", "stg", "feat", "ml", "gate", "serve", "done", "failed"}
 NODE = {"id", "x", "y", "name", "value", "state", "monitored", "cards"}
 CARD = {"card_id", "cve_id", "title", "score", "in_kev", "patch_state", "is_new", "technique_id", "tactic",
         "priority_rank"}
 ACTOR = {"id", "name", "team", "kind", "role", "node_id", "action", "target_node", "revealed", "busy_ticks"}
-SCORE = {"red", "blue", "healthy", "compromised", "isolated", "breaches_total", "breaches_in_top50"}
+SCORE = {"red", "blue", "healthy", "compromised", "isolated", "breaches_total", "breaches_in_top50",
+         "rate", "breakdown"}
+DELTA = {"team", "amount", "cause", "node_id", "actor_id", "cve_id"}
+DELTA_CAUSES = {"blue": {"patch", "restore", "isolate_cost"}, "red": {"first_breach", "held"}}
+FEEDBACK = {"player", "action", "outcome", "ok", "text"}
+REVEAL = {"n_cards", "n_real", "horizon_days", "items"}
+REVEAL_ITEM = {"cve_id", "title", "node_id", "node_name", "kev_date_added", "days_after_asof", "priority_rank",
+               "score", "score_source", "in_kev_at_asof", "fate", "by", "tick"}
 LEDGER = {"ledger_id", "match_id", "world_asof", "pipeline_run_id", "model_version", "tick", "ts", "actor_id",
           "team", "kind", "action", "node_id", "cve_id", "score_used", "score_source", "p_breach", "roll",
           "outcome", "policy", "reason_text", "llm_model", "llm_latency_ms"}
@@ -47,6 +59,27 @@ def check_message(msg):
         assert a["action"] in ACTIONS
         assert isinstance(a["revealed"], bool) and isinstance(a["busy_ticks"], int)
     assert set(msg["score"]) == SCORE
+    w = msg["world"]
+    assert w["gate_passed"] == (w["score_source"] == "model")
+    if w["advance"] is not None:
+        assert set(w["advance"]) == ADVANCE and w["advance"]["stage"] in ADVANCE_STAGES
+    assert set(msg["score"]["rate"]) == {"red", "blue"}
+    assert msg["score"]["rate"]["red"] >= 0 and msg["score"]["rate"]["blue"] <= 0
+    assert set(msg["score"]["breakdown"]) == {"blue", "red"}
+    assert set(msg["score"]["breakdown"]["blue"]) == {"patch", "restore", "isolate_cost"}
+    assert set(msg["score"]["breakdown"]["red"]) == {"first_breach", "held"}
+    for d in msg["score_deltas"]:
+        assert set(d) == DELTA and d["cause"] in DELTA_CAUSES[d["team"]]
+        assert isinstance(d["amount"], (int, float)) and 0 <= d["node_id"] < 20
+    for f in msg["player_feedback"]:
+        assert set(f) == FEEDBACK and f["player"] in (1, 2)
+        assert isinstance(f["ok"], bool) and f["text"] and f["action"] != "WAIT"
+    if msg["phase"] != "ended":
+        assert msg["reveal"] is None
+    elif msg["reveal"] is not None:
+        assert set(msg["reveal"]) == REVEAL and msg["reveal"]["n_real"] == len(msg["reveal"]["items"])
+        for i in msg["reveal"]["items"]:
+            assert set(i) == REVEAL_ITEM and i["fate"] in ("patched", "breached", "open")
     for r in msg["ledger"]:
         assert set(r) == LEDGER
     for e in msg["events"]:

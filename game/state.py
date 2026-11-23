@@ -101,6 +101,12 @@ class Card:
     attempted: bool = False             # any exploit attempt so far
     breached: bool = False              # this card was the way in
     dropped_tick: int | None = None     # set when it arrived in a mid-match drop
+    # Who closed or used this card, for the end-of-match reveal only (never in the state message
+    # while a match runs).
+    patched_by: str | None = None       # actor name whose PATCH finished (None for a RESTORE clean-up)
+    patched_tick: int | None = None
+    breached_by: str | None = None      # actor name of the first successful exploit through it
+    breached_tick: int | None = None
 
     def public(self) -> dict:
         return {
@@ -204,6 +210,12 @@ class Score:
     blue: float = 0.0
     breaches_total: int = 0
     breaches_in_top50: int = 0
+    # Cumulative causes this match. blue == patch + restore + isolate_cost; red == first_breach + held.
+    patch: float = 0.0
+    restore: float = 0.0
+    isolate_cost: float = 0.0           # zero or negative
+    first_breach: float = 0.0
+    held: float = 0.0
 
 
 @dataclass
@@ -283,23 +295,74 @@ def new_match(serving: Any, seed: int, match_id: str, tuning: Tuning = TUNING,
     return st
 
 
-def world_public(world: dict, advancing: bool) -> dict:
-    return {"asof_date": world.get("asof_date"), "score_source": world.get("score_source"),
+def world_public(world: dict, advancing: bool, advance: dict | None = None) -> dict:
+    """The `world` object of the state message. Every field after `advancing` is an addition and
+    may be null when the serving files lack it (mock or hand-made data)."""
+    run_id = world.get("pipeline_run_id")
+    visible = world.get("n_cves_visible") or None       # the loader stores a missing counter as 0
+    src = world.get("score_source")
+    return {"asof_date": world.get("asof_date"), "score_source": src,
             "model_version": world.get("model_version"),
             "challenger_p_at_50": world.get("challenger_p_at_50"),
-            "epss_p_at_50": world.get("epss_p_at_50"), "advancing": bool(advancing)}
+            "epss_p_at_50": world.get("epss_p_at_50"), "advancing": bool(advancing),
+            "pipeline_run_id": run_id if run_id and run_id != "unknown" else None,
+            "gate_passed": (src == "model") if src in ("model", "epss") else None,
+            "challenger_hits_at_50": world.get("challenger_hits_at_50"),
+            "epss_hits_at_50": world.get("epss_hits_at_50"),
+            "n_positives": world.get("n_positives"), "n_candidates": world.get("n_candidates"),
+            "n_cves_visible": visible,
+            "n_new_cves_this_week": world.get("n_new_cves_this_week") if visible else None,
+            "advance": advance}
+
+
+def score_rate(state: MatchState) -> dict:
+    """Points per tick right now: red earns the value of every compromised machine, blue pays
+    isolate_cost for every isolated one. An isolated machine earns red nothing, breached or not."""
+    red = sum(n.value for n in state.nodes if n.state == "compromised")
+    iso = sum(1 for n in state.nodes if n.state == "isolated")
+    cost = iso * state.tuning.isolate_cost
+    blue = -cost if cost else 0
+    return {"red": red, "blue": int(blue) if float(blue).is_integer() else round(blue, 2)}
 
 
 def score_public(state: MatchState) -> dict:
     c = state.counts()
-    return {"red": round(state.score.red, 2), "blue": round(state.score.blue, 2),
+    s = state.score
+    return {"red": round(s.red, 2), "blue": round(s.blue, 2),
             "healthy": c["healthy"], "compromised": c["compromised"], "isolated": c["isolated"],
-            "breaches_total": state.score.breaches_total,
-            "breaches_in_top50": state.score.breaches_in_top50}
+            "breaches_total": s.breaches_total,
+            "breaches_in_top50": s.breaches_in_top50,
+            "rate": score_rate(state),
+            "breakdown": {"blue": {"patch": round(s.patch, 2), "restore": round(s.restore, 2),
+                                   "isolate_cost": round(s.isolate_cost, 2)},
+                          "red": {"first_breach": round(s.first_breach, 2), "held": round(s.held, 2)}}}
+
+
+DELTA_CAUSES = {"patch", "restore", "isolate_cost", "first_breach", "held"}
+
+
+def delta(team: str, amount: float, cause: str, node_id: int | None, actor_id: str | None = None,
+          cve_id: str | None = None) -> dict:
+    """One entry of `score_deltas`: a single change to one team's score, with its cause."""
+    return {"team": team, "amount": round(float(amount), 4), "cause": cause, "node_id": node_id,
+            "actor_id": actor_id, "cve_id": cve_id}
+
+
+def deltas_public(state: MatchState, deltas: list[dict] | None) -> list[dict]:
+    """While a match runs, a delta never names an unrevealed red or the card it used. (A breach
+    reveals its red for breach_reveal_ticks, so this only bites if that is tuned to 0.)"""
+    out = []
+    for d in deltas or []:
+        a = state.actors.get(d.get("actor_id"))
+        if state.phase == "running" and a is not None and a.team == "red" and not a.revealed:
+            d = {**d, "actor_id": None, "cve_id": None}
+        out.append(dict(d))
+    return out
 
 
 # Ledger fields that would tell the humans what an undetected red did.
-_HIDDEN_ROW = {"action": "UNSEEN", "node_id": None, "cve_id": None, "score_used": None, "p_breach": None,
+_HIDDEN_ROW = {"action": "UNSEEN", "node_id": None, "cve_id": None, "score_used": None, "score_source": None,
+               "p_breach": None,
                "roll": None, "outcome": "undetected", "policy": None, "llm_model": None,
                "llm_latency_ms": None, "reason_text": "Not seen by the defenders."}
 
@@ -316,19 +379,26 @@ def is_unseen(state: MatchState, row: dict) -> bool:
 
 
 def snapshot(state: MatchState, rows: list[dict] | None = None, events: list[dict] | None = None,
-             advancing: bool = False) -> dict:
+             advancing: bool = False, advance: dict | None = None, deltas: list[dict] | None = None,
+             feedback: list[dict] | None = None, reveal: dict | None = None) -> dict:
     """The {"t":"state"} message of docs/CONTRACTS.md. While a match runs, an unrevealed red's
     position, action and ledger row are fogged (the full rows stay in the ledger files and
-    become visible through /api/ledger when the match ends)."""
+    become visible through /api/ledger when the match ends).
+
+    `deltas` and `feedback` are this tick's rules.StepResult lists; `reveal` (match.reveal_data)
+    is only ever sent once the match has ended."""
     fog = state.phase == "running"
     rows = [hidden_row(r) if is_unseen(state, r) else r for r in (rows or [])]
     return {
         "t": "state", "match_id": state.match_id, "phase": state.phase, "tick": state.tick,
         "ticks_total": state.ticks_total,
-        "world": world_public(state.world, advancing),
+        "world": world_public(state.world, advancing, advance),
         "nodes": [n.public() for n in state.nodes],
         "actors": [state.actors[a].public(fog) for a in ACTOR_IDS],
         "score": score_public(state),
         "ledger": rows,
         "events": [{"kind": e["kind"], "text": e["text"]} for e in (events or [])],
+        "score_deltas": deltas_public(state, deltas),
+        "player_feedback": [dict(f) for f in (feedback or [])],
+        "reveal": reveal if state.phase == "ended" else None,
     }

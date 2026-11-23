@@ -2,6 +2,7 @@
 world change: the new week's cards drop onto nodes and the reds open a campaign."""
 from __future__ import annotations
 
+import datetime as dt
 import random
 from dataclasses import dataclass, field
 from typing import Any
@@ -17,15 +18,45 @@ class TickResult:
     events: list[dict]
     facts: dict[str, dict] = field(default_factory=dict)
     campaign_started: bool = False
+    deltas: list[dict] = field(default_factory=list)     # rules.StepResult.deltas
+    feedback: list[dict] = field(default_factory=list)   # rules.StepResult.feedback
+
+
+def gate_text_legacy(world: dict) -> str:
+    """The wording used when world.json carries no hit counts (old or hand-made serving files)."""
+    c, e = world.get("challenger_p_at_50"), world.get("epss_p_at_50")
+    nums = (f"hits in top 50: our model {c:.0%}, EPSS baseline {e:.0%}" if c is not None and e is not None
+            else "hit counts not available")
+    if world.get("score_source") == "model":
+        version = world.get("model_version")
+        return (f"Gate passed for {world.get('asof_date')}: our model{f' ({version})' if version else ''} "
+                f"now sets the danger scores ({nums}).")
+    return f"Gate blocked for {world.get('asof_date')}: the EPSS baseline sets the danger scores ({nums})."
+
+
+def source_name(world: dict) -> str:
+    """Who sets the danger scores, in the screen's words."""
+    return "our model" if world.get("score_source") == "model" else "the EPSS baseline"
+
+
+def pct(x: float) -> str:
+    """A 0..1 value as the screen shows it: 94%, and one decimal below 10% so 0.4% is not 0%."""
+    p = float(x) * 100.0
+    return f"{p:.1f}%" if p < 10 else f"{p:.0f}%"
 
 
 def gate_text(world: dict) -> str:
-    c, e = world.get("challenger_p_at_50"), world.get("epss_p_at_50")
-    nums = (f"precision@50 model {c:.2f} vs EPSS {e:.2f}" if c is not None and e is not None
-            else "precision numbers not available")
+    """The `gate` event, in plain words: how many of the bugs that really became known exploited
+    each scorer put in its top 50, and who sets the danger scores now."""
+    ch, ep, n = world.get("challenger_hits_at_50"), world.get("epss_hits_at_50"), world.get("n_positives")
+    if ch is None or ep is None or n is None:
+        return gate_text_legacy(world)
     if world.get("score_source") == "model":
-        return f"Gate passed for {world.get('asof_date')}: model {world.get('model_version') or '?'} now sets the odds ({nums})."
-    return f"Gate not passed for {world.get('asof_date')}: EPSS sets the odds ({nums})."
+        version = world.get("model_version")
+        return (f"Gate passed: our model put {ch} of the {n} soon-to-be-exploited bugs in its top 50; "
+                f"the EPSS baseline put {ep}. Our model{f' ({version})' if version else ''} now sets "
+                f"the danger scores.")
+    return f"Gate blocked: our model {ch}, EPSS baseline {ep} (of {n}). EPSS stays."
 
 
 def apply_world_change(state: MatchState, serving: Any, rng: random.Random) -> list[dict]:
@@ -70,12 +101,14 @@ def apply_world_change(state: MatchState, serving: Any, rng: random.Random) -> l
         dropped.append((node.id, card))
     if dropped:
         names = sorted({state.nodes[nid].name for nid, _ in dropped})
+        by = source_name(state.world)
         events.append({"kind": "drop",
-                       "text": f"Patch Tuesday {state.world.get('asof_date')} (was {old_asof}): {len(dropped)} new cards "
-                               f"dropped on {len(names)} nodes, scored by {state.world.get('score_source')}."})
+                       "text": f"Patch Tuesday {state.world.get('asof_date')} (was {old_asof}): {len(dropped)} new "
+                               f"card{'s' if len(dropped) != 1 else ''} dropped on {len(names)} "
+                               f"machine{'s' if len(names) != 1 else ''}; danger set by {by}."})
         events.extend(start_campaign(state, dropped))
     else:
-        events.append({"kind": "info", "text": f"World moved to {state.world.get('asof_date')}; no new cards to drop."})
+        events.append({"kind": "info", "text": f"Data is now as of {state.world.get('asof_date')}; no new cards to drop."})
     return events
 
 
@@ -113,7 +146,8 @@ def start_campaign(state: MatchState, dropped: list[tuple[int, Card]]) -> list[d
         if targets[r]:
             parts.append(f"{state.actors[r].name} takes " + ", ".join(state.nodes[n].name for n, _ in targets[r]))
     return [{"kind": "campaign",
-             "text": f"Red campaign on {len(ranked)} fresh cards (top: {top[3].cve_id}, score {top[3].score:.2f}, "
+             "text": f"Red campaign on {len(ranked)} fresh card{'s' if len(ranked) != 1 else ''} "
+                     f"(top: {top[3].cve_id}, danger {pct(top[3].score)}, "
                      f"on {state.nodes[top[2]].name}). " + "; ".join(parts) + "."}]
 
 
@@ -141,7 +175,8 @@ def run_tick(state: MatchState, human_actions: dict[str, Action] | None, rng: ra
         events.append({"kind": "info",
                        "text": f"Match over. {verdict}: red {s.red:.1f}, blue {s.blue:.1f}, "
                                f"{s.breaches_total} breaches ({s.breaches_in_top50} on top-50 priority cards)."})
-    return TickResult(rows=res.rows, events=events, facts=res.facts, campaign_started=campaign)
+    return TickResult(rows=res.rows, events=events, facts=res.facts, campaign_started=campaign,
+                      deltas=res.deltas, feedback=res.feedback)
 
 
 def reveal_text(state: MatchState, reveal: dict[str, dict]) -> str | None:
@@ -156,3 +191,52 @@ def reveal_text(state: MatchState, reveal: dict[str, dict]) -> str | None:
     hit = sum(1 for c in real if c.breached)
     return (f"Reveal: {len(real)} of {len(cards)} cards on the board really entered KEV within 91 days; "
             f"blue patched {patched} of them in time, red breached through {hit}.")
+
+
+REVEAL_HORIZON_DAYS = 91
+
+
+def _days_between(later: str | None, earlier: str | None) -> int | None:
+    try:
+        return (dt.date.fromisoformat(str(later)[:10]) - dt.date.fromisoformat(str(earlier)[:10])).days
+    except (TypeError, ValueError):
+        return None
+
+
+def reveal_data(state: MatchState, reveal: dict[str, dict]) -> dict | None:
+    """`state.reveal`: the board cards that really entered KEV within 91 days of the board's date,
+    and what happened to each in this match. None when there is no reveal file (or the match is
+    still running: the future is never shown early).
+
+    A reveal entry may carry its own "asof_date" (the week it was computed for; the server stamps
+    it); without one the match's current world date is used."""
+    if not reveal or state.phase != "ended":
+        return None
+    board_asof = state.world.get("asof_date")
+    n_cards = 0
+    items = []
+    for n in state.nodes:
+        for c in n.cards:
+            r = reveal.get(c.cve_id)
+            if r is None:
+                continue
+            n_cards += 1
+            if not r.get("entered_kev_within_91d"):
+                continue
+            if c.breached:
+                fate, by, tick = "breached", c.breached_by, c.breached_tick
+            elif c.patch_state == "patched":
+                fate, by, tick = "patched", c.patched_by, c.patched_tick
+            else:
+                fate, by, tick = "open", None, None
+            added = r.get("kev_date_added")
+            items.append({
+                "cve_id": c.cve_id, "title": c.title, "node_id": n.id, "node_name": n.name,
+                "kev_date_added": added,
+                "days_after_asof": _days_between(added, r.get("asof_date") or board_asof),
+                "priority_rank": c.priority_rank, "score": round(c.score, 4),
+                "score_source": c.score_source, "in_kev_at_asof": c.in_kev,
+                "fate": fate, "by": by, "tick": tick,
+            })
+    items.sort(key=lambda i: (i["kev_date_added"] is None, i["kev_date_added"] or "", i["cve_id"]))
+    return {"n_cards": n_cards, "n_real": len(items), "horizon_days": REVEAL_HORIZON_DAYS, "items": items}

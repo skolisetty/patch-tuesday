@@ -1,0 +1,587 @@
+$ cd /mnt/c/repo/patch-tuesday && export PATH=$HOME/.local/bin:$PATH && bruin run --workers 1 --start-date 2026-03-23 --end-date '2026-03-29 23:59:59.999999' pipelines/patch_tuesday/pipeline.yml
+Analyzed the pipeline 'patch-tuesday' with 26 assets.
+
+Pipeline: patch-tuesday (..)
+  No issues found
+
+✓ Successfully validated 26 assets across 1 pipeline, all good.
+
+Interval: 2026-03-23T00:00:00Z - 2026-03-29T23:59:59Z
+
+Starting the pipeline execution...
+
+[13:24:43] Running:  landing.attack_techniques
+[13:24:44] [landing.attack_techniques] >> Installed 1 package in 83ms
+[13:24:45] [landing.attack_techniques] >> landing.attack_techniques: not a full refresh, keeping the day-0 table
+[13:24:45] [landing.attack_techniques] WARNING: materialize() returned None, skipping materialization
+[13:24:45] Finished: landing.attack_techniques (1.848s)
+[13:24:45] Running:  landing.cwe_attack_map
+[13:24:45] [landing.cwe_attack_map] >> Installed 1 package in 29ms
+[13:24:46] [landing.cwe_attack_map] >> landing.cwe_attack_map: not a full refresh, keeping the day-0 table
+[13:24:46] [landing.cwe_attack_map] WARNING: materialize() returned None, skipping materialization
+[13:24:46] Finished: landing.cwe_attack_map (1.114s)
+[13:24:46] Running:  landing.cwe_names
+[13:24:47] [landing.cwe_names] >> 
+[13:24:47] [landing.cwe_names] >> 
+[13:24:47] [landing.cwe_names] >> Initiated the pipeline with the following:
+[13:24:47] [landing.cwe_names] >> Source: csv / seed.raw
+[13:24:47] [landing.cwe_names] >> Destination: duckdb / landing.cwe_names
+[13:24:47] [landing.cwe_names] >> Incremental Strategy: replace
+[13:24:47] [landing.cwe_names] >> Incremental Key: None
+[13:24:47] [landing.cwe_names] >> Primary Key: cwe_id
+[13:24:47] [landing.cwe_names] >> 
+[13:24:47] [landing.cwe_names] >> 
+[13:24:47] [landing.cwe_names] >> 
+[13:24:47] [landing.cwe_names] >> Starting data ingestion...
+[13:24:47] [landing.cwe_names] >> [STRATEGY] 13:24:47 | Using staging table: landing.cwe_names_staging_5067ab45ed6e434d8b8f50311c8e280f
+[13:24:47] [landing.cwe_names] >> [PROGRESS] 13:24:47 | Rows: 190 | Batches: 1 | Rate: 2176 rows/s | CPU: 35.9% | Mem: 205 MB
+[13:24:47] [landing.cwe_names] >> 
+[13:24:47] [landing.cwe_names] >> ┌────────────────┬──────────────┐
+[13:24:47] [landing.cwe_names] >> │     METRIC     │    VALUE     │
+[13:24:47] [landing.cwe_names] >> ├────────────────┼──────────────┤
+[13:24:47] [landing.cwe_names] >> │ Total Rows     │          190 │
+[13:24:47] [landing.cwe_names] >> │ Total Batches  │            1 │
+[13:24:47] [landing.cwe_names] >> │ Duration       │         0.1s │
+[13:24:47] [landing.cwe_names] >> │ Avg Throughput │ 2,080 rows/s │
+[13:24:47] [landing.cwe_names] >> │ Peak Memory    │       205 MB │
+[13:24:47] [landing.cwe_names] >> └────────────────┴──────────────┘
+[13:24:47] [landing.cwe_names] >> Ingestion completed successfully!
+[13:24:47] Finished: landing.cwe_names (637ms)
+[13:24:47] Running:  landing.kev_attack_map
+[13:24:47] [landing.kev_attack_map] >> Installed 1 package in 39ms
+[13:24:48] [landing.kev_attack_map] >> landing.kev_attack_map: not a full refresh, keeping the day-0 table
+[13:24:48] [landing.kev_attack_map] WARNING: materialize() returned None, skipping materialization
+[13:24:48] Finished: landing.kev_attack_map (1.077s)
+[13:24:48] Running:  landing.kev
+[13:24:48] [landing.kev] >> 
+[13:24:48] [landing.kev] >> 
+[13:24:48] [landing.kev] >> Initiated the pipeline with the following:
+[13:24:48] [landing.kev] >> Source: csv / seed.raw
+[13:24:48] [landing.kev] >> Destination: duckdb / landing.kev
+[13:24:48] [landing.kev] >> Incremental Strategy: replace
+[13:24:48] [landing.kev] >> Incremental Key: None
+[13:24:48] [landing.kev] >> Primary Key: None
+[13:24:48] [landing.kev] >> 
+[13:24:48] [landing.kev] >> 
+[13:24:48] [landing.kev] >> Naming convention: snake_case (9 columns will be renamed)
+[13:24:48] [landing.kev] >> 
+[13:24:48] [landing.kev] >> Starting data ingestion...
+[13:24:48] [landing.kev] >> [STRATEGY] 13:24:48 | Using staging table: landing.kev_staging_1e67a6696fc4401daf83b2e6e6e8458c
+[13:24:48] [landing.kev] >> [PROGRESS] 13:24:48 | Rows: 1,790 | Batches: 1 | Rate: 16723 rows/s | CPU: 30.3% | Mem: 209 MB
+[13:24:48] [landing.kev] >> 
+[13:24:48] [landing.kev] >> ┌────────────────┬───────────────┐
+[13:24:48] [landing.kev] >> │     METRIC     │     VALUE     │
+[13:24:48] [landing.kev] >> ├────────────────┼───────────────┤
+[13:24:48] [landing.kev] >> │ Total Rows     │         1,790 │
+[13:24:48] [landing.kev] >> │ Total Batches  │             1 │
+[13:24:48] [landing.kev] >> │ Duration       │          0.1s │
+[13:24:48] [landing.kev] >> │ Avg Throughput │ 16,679 rows/s │
+[13:24:48] [landing.kev] >> │ Peak Memory    │        209 MB │
+[13:24:48] [landing.kev] >> └────────────────┴───────────────┘
+[13:24:48] [landing.kev] >> Ingestion completed successfully!
+[13:24:48] Finished: landing.kev (406ms)
+[13:24:48] Running:  landing.nvd_cves
+[13:24:49] [landing.nvd_cves] >> Installed 1 package in 52ms
+[13:24:49] [landing.nvd_cves] >> landing.nvd_cves: not a full refresh, keeping the table parsed on day 0
+[13:24:49] [landing.nvd_cves] WARNING: materialize() returned None, skipping materialization
+[13:24:49] Finished: landing.nvd_cves (1.119s)
+[13:24:49] Running:  ml.promotions
+[13:24:50] Finished: ml.promotions (105ms)
+[13:24:50] Running:  raw.world_clock
+[13:24:50] Finished: raw.world_clock (18ms)
+[13:24:50] Running:  landing.attack_techniques:technique_id:not_null
+[13:24:50] Finished: landing.attack_techniques:technique_id:not_null (1ms)
+[13:24:50] Running:  landing.attack_techniques:technique_id:unique
+[13:24:50] Finished: landing.attack_techniques:technique_id:unique (6ms)
+[13:24:50] Running:  landing.attack_techniques:technique_id:pattern
+[13:24:50] Finished: landing.attack_techniques:technique_id:pattern (1ms)
+[13:24:50] Running:  landing.attack_techniques:technique_name:not_null
+[13:24:50] Finished: landing.attack_techniques:technique_name:not_null (1ms)
+[13:24:50] Running:  landing.attack_techniques:is_subtechnique:not_null
+[13:24:50] Finished: landing.attack_techniques:is_subtechnique:not_null (1ms)
+[13:24:50] Running:  landing.attack_techniques:parent_technique_id:not_null
+[13:24:50] Finished: landing.attack_techniques:parent_technique_id:not_null (1ms)
+[13:24:50] Running:  landing.attack_techniques:custom-check:bundle_has_hundreds_of_techniques
+[13:24:50] Finished: landing.attack_techniques:custom-check:bundle_has_hundreds_of_techniques (3ms)
+[13:24:50] Running:  landing.cwe_attack_map:cwe_id:not_null
+[13:24:50] Finished: landing.cwe_attack_map:cwe_id:not_null (1ms)
+[13:24:50] Running:  landing.cwe_attack_map:cwe_id:pattern
+[13:24:50] Finished: landing.cwe_attack_map:cwe_id:pattern (2ms)
+[13:24:50] Running:  landing.cwe_attack_map:technique_id:not_null
+[13:24:50] Finished: landing.cwe_attack_map:technique_id:not_null (1ms)
+[13:24:50] Running:  landing.cwe_attack_map:n_capec:positive
+[13:24:50] Finished: landing.cwe_attack_map:n_capec:positive (1ms)
+[13:24:50] Running:  landing.cwe_attack_map:pair_rank:positive
+[13:24:50] Finished: landing.cwe_attack_map:pair_rank:positive (2ms)
+[13:24:50] Running:  landing.cwe_attack_map:custom-check:one_row_per_cwe_and_technique
+[13:24:50] Finished: landing.cwe_attack_map:custom-check:one_row_per_cwe_and_technique (9ms)
+[13:24:50] Running:  landing.cwe_names:cwe_id:not_null
+[13:24:50] Finished: landing.cwe_names:cwe_id:not_null (1ms)
+[13:24:50] Running:  landing.cwe_names:cwe_id:unique
+[13:24:50] Finished: landing.cwe_names:cwe_id:unique (3ms)
+[13:24:50] Running:  landing.cwe_names:cwe_id:pattern
+[13:24:50] Finished: landing.cwe_names:cwe_id:pattern (2ms)
+[13:24:50] Running:  landing.cwe_names:weakness_class:not_null
+[13:24:50] Finished: landing.cwe_names:weakness_class:not_null (1ms)
+[13:24:50] Running:  landing.kev_attack_map:cve_id:not_null
+[13:24:50] Finished: landing.kev_attack_map:cve_id:not_null (1ms)
+[13:24:50] Running:  landing.kev_attack_map:cve_id:pattern
+[13:24:50] Finished: landing.kev_attack_map:cve_id:pattern (3ms)
+[13:24:50] Running:  landing.kev_attack_map:technique_id:not_null
+[13:24:50] Finished: landing.kev_attack_map:technique_id:not_null (1ms)
+[13:24:50] Running:  landing.kev_attack_map:mapping_type:not_null
+[13:24:50] Finished: landing.kev_attack_map:mapping_type:not_null (0s)
+[13:24:50] Running:  landing.kev_attack_map:mapping_priority:positive
+[13:24:50] Finished: landing.kev_attack_map:mapping_priority:positive (1ms)
+[13:24:50] Running:  landing.kev_attack_map:custom-check:mapping_file_loaded
+[13:24:50] Finished: landing.kev_attack_map:custom-check:mapping_file_loaded (5ms)
+[13:24:50] Running:  landing.kev:custom-check:kev_catalogue_has_1790_rows
+[13:24:50] Finished: landing.kev:custom-check:kev_catalogue_has_1790_rows (4ms)
+[13:24:50] Running:  landing.kev:custom-check:cve_id_is_not_null_and_unique
+[13:24:50] Finished: landing.kev:custom-check:cve_id_is_not_null_and_unique (5ms)
+[13:24:50] Running:  landing.kev:custom-check:cve_id_matches_the_kev_schema_pattern
+[13:24:50] Finished: landing.kev:custom-check:cve_id_matches_the_kev_schema_pattern (4ms)
+[13:24:50] Running:  landing.kev:custom-check:date_added_is_a_non-null_date
+[13:24:50] Finished: landing.kev:custom-check:date_added_is_a_non-null_date (4ms)
+[13:24:50] Running:  landing.kev:custom-check:ransomware_flag_is_known_or_unknown
+[13:24:50] Finished: landing.kev:custom-check:ransomware_flag_is_known_or_unknown (4ms)
+[13:24:50] Running:  landing.nvd_cves:cve_id:not_null
+[13:24:50] Finished: landing.nvd_cves:cve_id:not_null (0s)
+[13:24:50] Running:  landing.nvd_cves:cve_id:unique
+[13:24:50] Finished: landing.nvd_cves:cve_id:unique (26ms)
+[13:24:50] Running:  landing.nvd_cves:cve_id:pattern
+[13:24:50] Finished: landing.nvd_cves:cve_id:pattern (22ms)
+[13:24:50] Running:  landing.nvd_cves:published_date:not_null
+[13:24:50] Finished: landing.nvd_cves:published_date:not_null (1ms)
+[13:24:50] Running:  landing.nvd_cves:vuln_status:not_null
+[13:24:50] Finished: landing.nvd_cves:vuln_status:not_null (1ms)
+[13:24:50] Running:  landing.nvd_cves:feed_year:not_null
+[13:24:50] Finished: landing.nvd_cves:feed_year:not_null (0s)
+[13:24:50] Running:  landing.nvd_cves:cvss_version:accepted_values
+[13:24:50] Finished: landing.nvd_cves:cvss_version:accepted_values (9ms)
+[13:24:50] Running:  landing.nvd_cves:cvss_base_score:min
+[13:24:50] Finished: landing.nvd_cves:cvss_base_score:min (2ms)
+[13:24:50] Running:  landing.nvd_cves:cvss_base_score:max
+[13:24:50] Finished: landing.nvd_cves:cvss_base_score:max (1ms)
+[13:24:50] Running:  landing.nvd_cves:exploitability_score:non_negative
+[13:24:50] Finished: landing.nvd_cves:exploitability_score:non_negative (1ms)
+[13:24:50] Running:  landing.nvd_cves:impact_score:non_negative
+[13:24:50] Finished: landing.nvd_cves:impact_score:non_negative (1ms)
+[13:24:50] Running:  landing.nvd_cves:av_network:accepted_values
+[13:24:50] Finished: landing.nvd_cves:av_network:accepted_values (9ms)
+[13:24:50] Running:  landing.nvd_cves:kw_rce:accepted_values
+[13:24:50] Finished: landing.nvd_cves:kw_rce:accepted_values (5ms)
+[13:24:50] Running:  landing.nvd_cves:custom-check:every_feed_year_2020-2026_loaded
+[13:24:50] Finished: landing.nvd_cves:custom-check:every_feed_year_2020-2026_loaded (11ms)
+[13:24:50] Running:  ml.promotions:custom-check:at_most_one_promotion_per_world_week
+[13:24:50] Finished: ml.promotions:custom-check:at_most_one_promotion_per_world_week (5ms)
+[13:24:50] Running:  raw.world_clock:asof_date:not_null
+[13:24:50] Finished: raw.world_clock:asof_date:not_null (1ms)
+[13:24:50] Running:  raw.world_clock:asof_date:unique
+[13:24:50] Finished: raw.world_clock:asof_date:unique (2ms)
+[13:24:50] Running:  raw.world_clock:window_start:not_null
+[13:24:50] Finished: raw.world_clock:window_start:not_null (1ms)
+[13:24:50] Running:  raw.world_clock:run_start_date:not_null
+[13:24:50] Finished: raw.world_clock:run_start_date:not_null (1ms)
+[13:24:50] Running:  raw.world_clock:full_refresh:not_null
+[13:24:50] Finished: raw.world_clock:full_refresh:not_null (1ms)
+[13:24:50] Running:  raw.world_clock:pipeline_run_id:not_null
+[13:24:50] Finished: raw.world_clock:pipeline_run_id:not_null (1ms)
+[13:24:50] Running:  raw.world_clock:horizon_days:positive
+[13:24:50] Finished: raw.world_clock:horizon_days:positive (1ms)
+[13:24:50] Running:  raw.world_clock:custom-check:exactly_one_clock_row
+[13:24:50] Finished: raw.world_clock:custom-check:exactly_one_clock_row (3ms)
+[13:24:50] Running:  raw.world_clock:custom-check:world_clock_is_a_sunday
+[13:24:50] Finished: raw.world_clock:custom-check:world_clock_is_a_sunday (4ms)
+[13:24:50] Running:  raw.world_clock:custom-check:an_advance_covers_exactly_one_world_week
+[13:24:50] Finished: raw.world_clock:custom-check:an_advance_covers_exactly_one_world_week (4ms)
+[13:24:50] Running:  raw.world_clock:custom-check:world_clock_is_inside_the_replay_range
+[13:24:50] Finished: raw.world_clock:custom-check:world_clock_is_inside_the_replay_range (4ms)
+[13:24:50] Running:  feat.snapshots
+[13:24:50] Finished: feat.snapshots (14ms)
+[13:24:50] Running:  ml.retract
+[13:24:50] Finished: ml.retract (5ms)
+[13:24:50] Running:  raw.cves
+[13:24:50] Finished: raw.cves (50ms)
+[13:24:50] Running:  raw.epss
+[13:24:51] Finished: raw.epss (833ms)
+[13:24:51] Running:  raw.kev
+[13:24:51] Finished: raw.kev (20ms)
+[13:24:51] Running:  feat.snapshots:role:not_null
+[13:24:51] Finished: feat.snapshots:role:not_null (1ms)
+[13:24:51] Running:  feat.snapshots:role:accepted_values
+[13:24:51] Finished: feat.snapshots:role:accepted_values (1ms)
+[13:24:51] Running:  feat.snapshots:idx:non_negative
+[13:24:51] Finished: feat.snapshots:idx:non_negative (1ms)
+[13:24:51] Running:  feat.snapshots:snapshot_date:not_null
+[13:24:51] Finished: feat.snapshots:snapshot_date:not_null (1ms)
+[13:24:51] Running:  feat.snapshots:snapshot_date:unique
+[13:24:51] Finished: feat.snapshots:snapshot_date:unique (2ms)
+[13:24:51] Running:  feat.snapshots:custom-check:one_serve,_one_valid_and_the_configured_number_of_train_snapshots
+[13:24:51] Finished: feat.snapshots:custom-check:one_serve,_one_valid_and_the_configured_number_of_train_snapshots (5ms)
+[13:24:51] Running:  feat.snapshots:custom-check:every_snapshot_is_a_sunday
+[13:24:51] Finished: feat.snapshots:custom-check:every_snapshot_is_a_sunday (4ms)
+[13:24:51] Running:  raw.cves:cve_id:not_null
+[13:24:51] Finished: raw.cves:cve_id:not_null (1ms)
+[13:24:51] Running:  raw.cves:cve_id:unique
+[13:24:51] Finished: raw.cves:cve_id:unique (24ms)
+[13:24:51] Running:  raw.cves:cve_id:pattern
+[13:24:51] Finished: raw.cves:cve_id:pattern (16ms)
+[13:24:51] Running:  raw.cves:published_date:not_null
+[13:24:51] Finished: raw.cves:published_date:not_null (1ms)
+[13:24:51] Running:  raw.cves:cvss_base_score:min
+[13:24:51] Finished: raw.cves:cvss_base_score:min (1ms)
+[13:24:51] Running:  raw.cves:cvss_base_score:max
+[13:24:51] Finished: raw.cves:cvss_base_score:max (1ms)
+[13:24:51] Running:  raw.cves:av_network:not_null
+[13:24:51] Finished: raw.cves:av_network:not_null (1ms)
+[13:24:51] Running:  raw.cves:pr_none:not_null
+[13:24:51] Finished: raw.cves:pr_none:not_null (1ms)
+[13:24:51] Running:  raw.cves:custom-check:no_cve_from_the_future
+[13:24:51] Finished: raw.cves:custom-check:no_cve_from_the_future (5ms)
+[13:24:51] Running:  raw.cves:custom-check:no_rejected_records
+[13:24:51] Finished: raw.cves:custom-check:no_rejected_records (5ms)
+[13:24:51] Running:  raw.epss:cve_id:not_null
+[13:24:51] Finished: raw.epss:cve_id:not_null (1ms)
+[13:24:51] Running:  raw.epss:epss:not_null
+[13:24:51] Finished: raw.epss:epss:not_null (1ms)
+[13:24:51] Running:  raw.epss:epss:min
+[13:24:51] Finished: raw.epss:epss:min (1ms)
+[13:24:51] Running:  raw.epss:epss:max
+[13:24:51] Finished: raw.epss:epss:max (1ms)
+[13:24:51] Running:  raw.epss:percentile:min
+[13:24:51] Finished: raw.epss:percentile:min (1ms)
+[13:24:51] Running:  raw.epss:percentile:max
+[13:24:51] Finished: raw.epss:percentile:max (1ms)
+[13:24:51] Running:  raw.epss:score_date:not_null
+[13:24:51] Finished: raw.epss:score_date:not_null (1ms)
+[13:24:51] Running:  raw.epss:custom-check:no_score_from_the_future
+[13:24:51] Finished: raw.epss:custom-check:no_score_from_the_future (6ms)
+[13:24:51] Running:  raw.epss:custom-check:the_file_for_the_world_clock_is_loaded
+[13:24:51] Finished: raw.epss:custom-check:the_file_for_the_world_clock_is_loaded (10ms)
+[13:24:51] Running:  raw.epss:custom-check:one_score_per_cve_per_file
+[13:24:52] Finished: raw.epss:custom-check:one_score_per_cve_per_file (1.508s)
+[13:24:52] Running:  raw.kev:cve_id:not_null
+[13:24:52] Finished: raw.kev:cve_id:not_null (2ms)
+[13:24:52] Running:  raw.kev:cve_id:unique
+[13:24:52] Finished: raw.kev:cve_id:unique (4ms)
+[13:24:52] Running:  raw.kev:date_added:not_null
+[13:24:52] Finished: raw.kev:date_added:not_null (1ms)
+[13:24:52] Running:  raw.kev:vendor_project:not_null
+[13:24:52] Finished: raw.kev:vendor_project:not_null (1ms)
+[13:24:52] Running:  raw.kev:vendor_norm:not_null
+[13:24:52] Finished: raw.kev:vendor_norm:not_null (1ms)
+[13:24:52] Running:  raw.kev:known_ransomware_campaign_use:accepted_values
+[13:24:52] Finished: raw.kev:known_ransomware_campaign_use:accepted_values (1ms)
+[13:24:52] Running:  raw.kev:custom-check:no_kev_row_from_the_future
+[13:24:52] Finished: raw.kev:custom-check:no_kev_row_from_the_future (8ms)
+[13:24:52] Running:  feat.snapshot_features
+[13:24:55] Finished: feat.snapshot_features (2.133s)
+[13:24:55] Running:  stg.cve_technique
+[13:24:55] Finished: stg.cve_technique (296ms)
+[13:24:55] Running:  feat.snapshot_features:role:not_null
+[13:24:55] Finished: feat.snapshot_features:role:not_null (2ms)
+[13:24:55] Running:  feat.snapshot_features:role:accepted_values
+[13:24:55] Finished: feat.snapshot_features:role:accepted_values (4ms)
+[13:24:55] Running:  feat.snapshot_features:snapshot_date:not_null
+[13:24:55] Finished: feat.snapshot_features:snapshot_date:not_null (1ms)
+[13:24:55] Running:  feat.snapshot_features:cve_id:not_null
+[13:24:55] Finished: feat.snapshot_features:cve_id:not_null (1ms)
+[13:24:55] Running:  feat.snapshot_features:published_date:not_null
+[13:24:55] Finished: feat.snapshot_features:published_date:not_null (1ms)
+[13:24:55] Running:  feat.snapshot_features:y:accepted_values
+[13:24:55] Finished: feat.snapshot_features:y:accepted_values (6ms)
+[13:24:55] Running:  feat.snapshot_features:in_kev_asof:not_null
+[13:24:55] Finished: feat.snapshot_features:in_kev_asof:not_null (1ms)
+[13:24:55] Running:  feat.snapshot_features:age_days:not_null
+[13:24:55] Finished: feat.snapshot_features:age_days:not_null (1ms)
+[13:24:55] Running:  feat.snapshot_features:age_days:non_negative
+[13:24:55] Finished: feat.snapshot_features:age_days:non_negative (1ms)
+[13:24:55] Running:  feat.snapshot_features:has_cvss:accepted_values
+[13:24:55] Finished: feat.snapshot_features:has_cvss:accepted_values (2ms)
+[13:24:55] Running:  feat.snapshot_features:epss_asof:min
+[13:24:55] Finished: feat.snapshot_features:epss_asof:min (1ms)
+[13:24:55] Running:  feat.snapshot_features:epss_asof:max
+[13:24:55] Finished: feat.snapshot_features:epss_asof:max (1ms)
+[13:24:55] Running:  feat.snapshot_features:vendor_kev_count_asof:non_negative
+[13:24:55] Finished: feat.snapshot_features:vendor_kev_count_asof:non_negative (1ms)
+[13:24:55] Running:  feat.snapshot_features:vendor_cve_count_asof:non_negative
+[13:24:55] Finished: feat.snapshot_features:vendor_cve_count_asof:non_negative (1ms)
+[13:24:55] Running:  feat.snapshot_features:vendor_kev_ratio_asof:non_negative
+[13:24:55] Finished: feat.snapshot_features:vendor_kev_ratio_asof:non_negative (1ms)
+[13:24:55] Running:  feat.snapshot_features:product_kev_count_asof:non_negative
+[13:24:55] Finished: feat.snapshot_features:product_kev_count_asof:non_negative (1ms)
+[13:24:55] Running:  feat.snapshot_features:cwe_kev_count_asof:non_negative
+[13:24:55] Finished: feat.snapshot_features:cwe_kev_count_asof:non_negative (1ms)
+[13:24:55] Running:  feat.snapshot_features:custom-check:no_label_window_ends_after_the_world_clock
+[13:24:55] Finished: feat.snapshot_features:custom-check:no_label_window_ends_after_the_world_clock (6ms)
+[13:24:55] Running:  feat.snapshot_features:custom-check:serve_rows_carry_no_label
+[13:24:55] Finished: feat.snapshot_features:custom-check:serve_rows_carry_no_label (5ms)
+[13:24:55] Running:  feat.snapshot_features:custom-check:no_candidate_published_after_its_snapshot
+[13:24:55] Finished: feat.snapshot_features:custom-check:no_candidate_published_after_its_snapshot (4ms)
+[13:24:55] Running:  feat.snapshot_features:custom-check:no_epss_file_dated_after_its_snapshot
+[13:24:55] Finished: feat.snapshot_features:custom-check:no_epss_file_dated_after_its_snapshot (3ms)
+[13:24:55] Running:  feat.snapshot_features:custom-check:train_and_valid_candidates_are_not_yet_in_kev
+[13:24:55] Finished: feat.snapshot_features:custom-check:train_and_valid_candidates_are_not_yet_in_kev (4ms)
+[13:24:55] Running:  feat.snapshot_features:custom-check:positives_are_inside_their_label_window
+[13:24:55] Finished: feat.snapshot_features:custom-check:positives_are_inside_their_label_window (9ms)
+[13:24:55] Running:  feat.snapshot_features:custom-check:one_row_per_snapshot_and_cve
+[13:24:55] Finished: feat.snapshot_features:custom-check:one_row_per_snapshot_and_cve (31ms)
+[13:24:55] Running:  feat.snapshot_features:custom-check:serve_snapshot_matches_the_world_clock
+[13:24:55] Finished: feat.snapshot_features:custom-check:serve_snapshot_matches_the_world_clock (8ms)
+[13:24:55] Running:  stg.cve_technique:cve_id:not_null
+[13:24:55] Finished: stg.cve_technique:cve_id:not_null (1ms)
+[13:24:55] Running:  stg.cve_technique:cve_id:unique
+[13:24:55] Finished: stg.cve_technique:cve_id:unique (16ms)
+[13:24:55] Running:  stg.cve_technique:weakness_class:not_null
+[13:24:55] Finished: stg.cve_technique:weakness_class:not_null (2ms)
+[13:24:55] Running:  stg.cve_technique:mapping_source:not_null
+[13:24:55] Finished: stg.cve_technique:mapping_source:not_null (2ms)
+[13:24:55] Running:  stg.cve_technique:mapping_source:accepted_values
+[13:24:55] Finished: stg.cve_technique:mapping_source:accepted_values (4ms)
+[13:24:55] Running:  stg.cve_technique:custom-check:every_visible_cve_has_a_mapping_row
+[13:24:55] Finished: stg.cve_technique:custom-check:every_visible_cve_has_a_mapping_row (5ms)
+[13:24:55] Running:  stg.cve_technique:custom-check:ctid_mapping_only_for_cves_already_in_kev
+[13:24:55] Finished: stg.cve_technique:custom-check:ctid_mapping_only_for_cves_already_in_kev (10ms)
+[13:24:55] Running:  feat.fingerprints
+[13:24:55] Finished: feat.fingerprints (309ms)
+[13:24:55] Running:  feat.fingerprints:asof_date:not_null
+[13:24:55] Finished: feat.fingerprints:asof_date:not_null (2ms)
+[13:24:55] Running:  feat.fingerprints:snapshot_date:not_null
+[13:24:55] Finished: feat.fingerprints:snapshot_date:not_null (2ms)
+[13:24:55] Running:  feat.fingerprints:n_rows:positive
+[13:24:55] Finished: feat.fingerprints:n_rows:positive (2ms)
+[13:24:55] Running:  feat.fingerprints:n_positives:non_negative
+[13:24:55] Finished: feat.fingerprints:n_positives:non_negative (1ms)
+[13:24:55] Running:  feat.fingerprints:fingerprint:not_null
+[13:24:55] Finished: feat.fingerprints:fingerprint:not_null (1ms)
+[13:24:55] Running:  feat.fingerprints:custom-check:a_training_snapshot_is_identical_at_every_world_clock
+[13:24:55] Finished: feat.fingerprints:custom-check:a_training_snapshot_is_identical_at_every_world_clock (10ms)
+[13:24:55] Running:  ml.challenger_scores
+[13:24:56] [ml.challenger_scores] >> Installed 1 package in 49ms
+[13:24:59] [ml.challenger_scores] >> ml.challenger_scores: train rows 45710, positives 134, scoring 361756 rows
+[13:25:05] [ml.challenger_scores] >> ml.challenger_scores: hgb-2026-03-29 scored 361756 rows in 5.8s
+[13:25:05] [ml.challenger_scores] Successfully collected the data from the asset, uploading to the destination...
+[13:25:05] [ml.challenger_scores] Successfully loaded the data from the asset into the destination.
+[13:25:05] Finished: ml.challenger_scores (10.169s)
+[13:25:05] Running:  ml.challenger_scores:asof_date:not_null
+[13:25:05] Finished: ml.challenger_scores:asof_date:not_null (18ms)
+[13:25:05] Running:  ml.challenger_scores:snapshot_date:not_null
+[13:25:06] Finished: ml.challenger_scores:snapshot_date:not_null (0s)
+[13:25:06] Running:  ml.challenger_scores:role:not_null
+[13:25:06] Finished: ml.challenger_scores:role:not_null (0s)
+[13:25:06] Running:  ml.challenger_scores:role:accepted_values
+[13:25:06] Finished: ml.challenger_scores:role:accepted_values (3ms)
+[13:25:06] Running:  ml.challenger_scores:cve_id:not_null
+[13:25:06] Finished: ml.challenger_scores:cve_id:not_null (1ms)
+[13:25:06] Running:  ml.challenger_scores:model_score:not_null
+[13:25:06] Finished: ml.challenger_scores:model_score:not_null (0s)
+[13:25:06] Running:  ml.challenger_scores:model_score:min
+[13:25:06] Finished: ml.challenger_scores:model_score:min (1ms)
+[13:25:06] Running:  ml.challenger_scores:model_score:max
+[13:25:06] Finished: ml.challenger_scores:model_score:max (1ms)
+[13:25:06] Running:  ml.challenger_scores:model_version:not_null
+[13:25:06] Finished: ml.challenger_scores:model_version:not_null (0s)
+[13:25:06] Running:  ml.challenger_scores:run_id:not_null
+[13:25:06] Finished: ml.challenger_scores:run_id:not_null (0s)
+[13:25:06] Running:  ml.challenger_scores:n_train_rows:positive
+[13:25:06] Finished: ml.challenger_scores:n_train_rows:positive (0s)
+[13:25:06] Running:  ml.challenger_scores:n_train_positives:non_negative
+[13:25:06] Finished: ml.challenger_scores:n_train_positives:non_negative (0s)
+[13:25:06] Running:  ml.challenger_scores:custom-check:both_roles_were_scored
+[13:25:06] Finished: ml.challenger_scores:custom-check:both_roles_were_scored (5ms)
+[13:25:06] Running:  ml.eval_metrics
+[13:25:06] Finished: ml.eval_metrics (127ms)
+[13:25:06] Running:  ml.sensitivity
+[13:25:06] [ml.sensitivity] >> Installed 1 package in 29ms
+[13:25:11] [ml.sensitivity] >> ml.sensitivity: 2026-03-29: positives 32, hits@50 full 2, masked (no NVD-derived features, 11 kept) 2, EPSS 0
+[13:25:11] [ml.sensitivity] Successfully collected the data from the asset, uploading to the destination...
+[13:25:12] [ml.sensitivity] Successfully loaded the data from the asset into the destination.
+[13:25:12] Finished: ml.sensitivity (5.856s)
+[13:25:12] Running:  ml.eval_metrics:asof_date:not_null
+[13:25:12] Finished: ml.eval_metrics:asof_date:not_null (16ms)
+[13:25:12] Running:  ml.eval_metrics:asof_date:unique
+[13:25:12] Finished: ml.eval_metrics:asof_date:unique (3ms)
+[13:25:12] Running:  ml.eval_metrics:valid_snapshot_date:not_null
+[13:25:12] Finished: ml.eval_metrics:valid_snapshot_date:not_null (1ms)
+[13:25:12] Running:  ml.eval_metrics:model_version:not_null
+[13:25:12] Finished: ml.eval_metrics:model_version:not_null (1ms)
+[13:25:12] Running:  ml.eval_metrics:pipeline_run_id:not_null
+[13:25:12] Finished: ml.eval_metrics:pipeline_run_id:not_null (0s)
+[13:25:12] Running:  ml.eval_metrics:n_candidates:positive
+[13:25:12] Finished: ml.eval_metrics:n_candidates:positive (0s)
+[13:25:12] Running:  ml.eval_metrics:n_positives:non_negative
+[13:25:12] Finished: ml.eval_metrics:n_positives:non_negative (0s)
+[13:25:12] Running:  ml.eval_metrics:challenger_hits_at_50:non_negative
+[13:25:12] Finished: ml.eval_metrics:challenger_hits_at_50:non_negative (0s)
+[13:25:12] Running:  ml.eval_metrics:epss_hits_at_50:non_negative
+[13:25:12] Finished: ml.eval_metrics:epss_hits_at_50:non_negative (0s)
+[13:25:12] Running:  ml.eval_metrics:challenger_p_at_50:min
+[13:25:12] Finished: ml.eval_metrics:challenger_p_at_50:min (0s)
+[13:25:12] Running:  ml.eval_metrics:challenger_p_at_50:max
+[13:25:12] Finished: ml.eval_metrics:challenger_p_at_50:max (0s)
+[13:25:12] Running:  ml.eval_metrics:epss_p_at_50:min
+[13:25:12] Finished: ml.eval_metrics:epss_p_at_50:min (0s)
+[13:25:12] Running:  ml.eval_metrics:epss_p_at_50:max
+[13:25:12] Finished: ml.eval_metrics:epss_p_at_50:max (0s)
+[13:25:12] Running:  ml.eval_metrics:gate_passed:not_null
+[13:25:12] Finished: ml.eval_metrics:gate_passed:not_null (0s)
+[13:25:12] Running:  ml.eval_metrics:custom-check:challenger_beats_epss_on_precision@50
+[13:25:12] Finished: ml.eval_metrics:custom-check:challenger_beats_epss_on_precision@50 (7ms)
+[13:25:12] Running:  ml.eval_metrics:custom-check:validation_set_has_at_least_10_positives
+[13:25:12] Finished: ml.eval_metrics:custom-check:validation_set_has_at_least_10_positives (6ms)
+[13:25:12] Running:  ml.eval_metrics:custom-check:challenger_was_scored_for_this_as-of_date
+[13:25:12] Finished: ml.eval_metrics:custom-check:challenger_was_scored_for_this_as-of_date (6ms)
+[13:25:12] Running:  ml.sensitivity:asof_date:not_null
+[13:25:12] Finished: ml.sensitivity:asof_date:not_null (1ms)
+[13:25:12] Running:  ml.sensitivity:pipeline_run_id:not_null
+[13:25:12] Finished: ml.sensitivity:pipeline_run_id:not_null (1ms)
+[13:25:12] Running:  ml.sensitivity:n_positives:non_negative
+[13:25:12] Finished: ml.sensitivity:n_positives:non_negative (0s)
+[13:25:12] Running:  ml.sensitivity:full_hits_at_50:non_negative
+[13:25:12] Finished: ml.sensitivity:full_hits_at_50:non_negative (0s)
+[13:25:12] Running:  ml.sensitivity:masked_hits_at_50:non_negative
+[13:25:12] Finished: ml.sensitivity:masked_hits_at_50:non_negative (1ms)
+[13:25:12] Running:  ml.sensitivity:epss_hits_at_50:non_negative
+[13:25:12] Finished: ml.sensitivity:epss_hits_at_50:non_negative (1ms)
+[13:25:12] Running:  ml.sensitivity:masked_hits_at_100:non_negative
+[13:25:12] Finished: ml.sensitivity:masked_hits_at_100:non_negative (0s)
+[13:25:12] Running:  ml.sensitivity:masked_beats_epss:not_null
+[13:25:12] Finished: ml.sensitivity:masked_beats_epss:not_null (0s)
+[13:25:12] Running:  ml.sensitivity:n_features_kept:positive
+[13:25:12] Finished: ml.sensitivity:n_features_kept:positive (0s)
+[13:25:12] Running:  ml.promote
+[13:25:12] Finished: ml.promote (14ms)
+[13:25:12] Running:  serve.patch_priority
+[13:25:12] Finished: serve.patch_priority (584ms)
+[13:25:12] Running:  serve.patch_priority:rank:not_null
+[13:25:12] Finished: serve.patch_priority:rank:not_null (4ms)
+[13:25:12] Running:  serve.patch_priority:rank:unique
+[13:25:12] Finished: serve.patch_priority:rank:unique (8ms)
+[13:25:12] Running:  serve.patch_priority:rank:positive
+[13:25:12] Finished: serve.patch_priority:rank:positive (1ms)
+[13:25:12] Running:  serve.patch_priority:cve_id:not_null
+[13:25:12] Finished: serve.patch_priority:cve_id:not_null (0s)
+[13:25:12] Running:  serve.patch_priority:cve_id:unique
+[13:25:12] Finished: serve.patch_priority:cve_id:unique (13ms)
+[13:25:12] Running:  serve.patch_priority:score:not_null
+[13:25:12] Finished: serve.patch_priority:score:not_null (1ms)
+[13:25:12] Running:  serve.patch_priority:score:min
+[13:25:12] Finished: serve.patch_priority:score:min (1ms)
+[13:25:12] Running:  serve.patch_priority:score:max
+[13:25:12] Finished: serve.patch_priority:score:max (0s)
+[13:25:12] Running:  serve.patch_priority:score_source:not_null
+[13:25:12] Finished: serve.patch_priority:score_source:not_null (0s)
+[13:25:12] Running:  serve.patch_priority:score_source:accepted_values
+[13:25:12] Finished: serve.patch_priority:score_source:accepted_values (1ms)
+[13:25:12] Running:  serve.patch_priority:in_kev:not_null
+[13:25:12] Finished: serve.patch_priority:in_kev:not_null (0s)
+[13:25:12] Running:  serve.patch_priority:age_days:non_negative
+[13:25:12] Finished: serve.patch_priority:age_days:non_negative (1ms)
+[13:25:12] Running:  serve.patch_priority:severity:accepted_values
+[13:25:12] Finished: serve.patch_priority:severity:accepted_values (11ms)
+[13:25:12] Running:  serve.patch_priority:custom-check:one_score_source_per_week
+[13:25:12] Finished: serve.patch_priority:custom-check:one_score_source_per_week (9ms)
+[13:25:12] Running:  serve.patch_priority:custom-check:model_scores_only_when_promoted_for_this_clock
+[13:25:12] Finished: serve.patch_priority:custom-check:model_scores_only_when_promoted_for_this_clock (7ms)
+[13:25:12] Running:  serve.patch_priority:custom-check:ctid_technique_only_for_cves_already_in_kev
+[13:25:12] Finished: serve.patch_priority:custom-check:ctid_technique_only_for_cves_already_in_kev (22ms)
+[13:25:12] Running:  serve.patch_priority:custom-check:serving_covers_every_visible_cve
+[13:25:12] Finished: serve.patch_priority:custom-check:serving_covers_every_visible_cve (6ms)
+[13:25:12] Running:  serve.attack_cards
+[13:25:12] Finished: serve.attack_cards (139ms)
+[13:25:12] Running:  serve.attack_cards:card_id:not_null
+[13:25:12] Finished: serve.attack_cards:card_id:not_null (1ms)
+[13:25:12] Running:  serve.attack_cards:card_id:unique
+[13:25:12] Finished: serve.attack_cards:card_id:unique (2ms)
+[13:25:12] Running:  serve.attack_cards:card_id:positive
+[13:25:12] Finished: serve.attack_cards:card_id:positive (1ms)
+[13:25:12] Running:  serve.attack_cards:cve_id:not_null
+[13:25:12] Finished: serve.attack_cards:cve_id:not_null (1ms)
+[13:25:12] Running:  serve.attack_cards:cve_id:unique
+[13:25:12] Finished: serve.attack_cards:cve_id:unique (1ms)
+[13:25:12] Running:  serve.attack_cards:cve_id:pattern
+[13:25:12] Finished: serve.attack_cards:cve_id:pattern (1ms)
+[13:25:12] Running:  serve.attack_cards:title:not_null
+[13:25:12] Finished: serve.attack_cards:title:not_null (0s)
+[13:25:12] Running:  serve.attack_cards:deck_pick:accepted_values
+[13:25:12] Finished: serve.attack_cards:deck_pick:accepted_values (0s)
+[13:25:12] Running:  serve.attack_cards:published_date:not_null
+[13:25:12] Finished: serve.attack_cards:published_date:not_null (0s)
+[13:25:12] Running:  serve.attack_cards:age_days:not_null
+[13:25:12] Finished: serve.attack_cards:age_days:not_null (0s)
+[13:25:12] Running:  serve.attack_cards:age_days:non_negative
+[13:25:12] Finished: serve.attack_cards:age_days:non_negative (1ms)
+[13:25:12] Running:  serve.attack_cards:severity:accepted_values
+[13:25:12] Finished: serve.attack_cards:severity:accepted_values (1ms)
+[13:25:12] Running:  serve.attack_cards:score:not_null
+[13:25:12] Finished: serve.attack_cards:score:not_null (0s)
+[13:25:12] Running:  serve.attack_cards:score:min
+[13:25:12] Finished: serve.attack_cards:score:min (0s)
+[13:25:12] Running:  serve.attack_cards:score:max
+[13:25:12] Finished: serve.attack_cards:score:max (0s)
+[13:25:12] Running:  serve.attack_cards:score_source:not_null
+[13:25:12] Finished: serve.attack_cards:score_source:not_null (0s)
+[13:25:12] Running:  serve.attack_cards:score_source:accepted_values
+[13:25:12] Finished: serve.attack_cards:score_source:accepted_values (1ms)
+[13:25:12] Running:  serve.attack_cards:in_kev:not_null
+[13:25:12] Finished: serve.attack_cards:in_kev:not_null (1ms)
+[13:25:12] Running:  serve.attack_cards:mapping_source:not_null
+[13:25:12] Finished: serve.attack_cards:mapping_source:not_null (1ms)
+[13:25:12] Running:  serve.attack_cards:mapping_source:accepted_values
+[13:25:12] Finished: serve.attack_cards:mapping_source:accepted_values (1ms)
+[13:25:12] Running:  serve.attack_cards:is_new_this_week:not_null
+[13:25:12] Finished: serve.attack_cards:is_new_this_week:not_null (1ms)
+[13:25:12] Running:  serve.attack_cards:custom-check:deck_has_between_60_and_150_cards
+[13:25:12] Finished: serve.attack_cards:custom-check:deck_has_between_60_and_150_cards (4ms)
+[13:25:12] Running:  serve.attack_cards:custom-check:deck_uses_the_same_score_source_as_patch_priority
+[13:25:12] Finished: serve.attack_cards:custom-check:deck_uses_the_same_score_source_as_patch_priority (7ms)
+[13:25:12] Running:  serve.attack_cards:custom-check:ctid_mapping_only_for_cards_already_in_kev
+[13:25:12] Finished: serve.attack_cards:custom-check:ctid_mapping_only_for_cards_already_in_kev (3ms)
+[13:25:12] Running:  serve.attack_cards:custom-check:no_card_text_looks_like_a_link_or_description
+[13:25:12] Finished: serve.attack_cards:custom-check:no_card_text_looks_like_a_link_or_description (4ms)
+[13:25:12] Running:  serve.export_cards
+[13:25:12] Finished: serve.export_cards (45ms)
+[13:25:12] Running:  serve.export_priority
+[13:25:13] Finished: serve.export_priority (36ms)
+[13:25:13] Running:  sim.reveal
+[13:25:13] Finished: sim.reveal (38ms)
+[13:25:13] Running:  serve.export_world
+[13:25:13] Finished: serve.export_world (43ms)
+
+==================================================
+
+PASS landing.attack_techniques .......
+PASS landing.cwe_attack_map ......
+PASS landing.cwe_names ....
+PASS landing.kev_attack_map ......
+PASS landing.kev .....
+PASS landing.nvd_cves ..............
+PASS ml.promotions .
+PASS raw.world_clock ...........
+PASS feat.snapshots .......
+PASS ml.retract 
+PASS raw.cves ..........
+PASS raw.epss ..........
+PASS raw.kev .......
+PASS feat.snapshot_features .........................
+PASS stg.cve_technique .......
+PASS feat.fingerprints ......
+PASS ml.challenger_scores .............
+PASS ml.eval_metrics .................
+PASS ml.sensitivity .........
+PASS ml.promote 
+PASS serve.patch_priority .................
+PASS serve.attack_cards .........................
+PASS serve.export_cards 
+PASS serve.export_priority 
+PASS sim.reveal 
+PASS serve.export_world 
+
+
+bruin run completed successfully in 29.329s
+
+ ✓ Assets executed      26 succeeded
+ ✓ Quality checks       207 succeeded
+
+[exit 0]

@@ -37,6 +37,9 @@ DEFAULT_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173",
                    "http://localhost:8000", "http://127.0.0.1:8000")
 WS_MAX_MESSAGE = 1024          # contract messages are under 200 bytes
 MAX_CLIENTS = 8
+# While advance.py runs and no match is ticking, a state message goes out this often so the
+# pipeline strip still moves (a running match already publishes every tick).
+ADVANCE_HEARTBEAT_SECONDS = 1.0
 
 
 def allowed_origins() -> set[str]:
@@ -204,14 +207,42 @@ class Game:
         t.add_done_callback(self._bg.discard)
 
     # ------------------------------------------------------------ messages
-    def snapshot(self, rows=None, events=None) -> dict:
+    def advance_public(self) -> dict | None:
+        """`world.advance`: live progress while advance.py runs; the closing "done" object while
+        its new week still waits in pending_world; else None. Reads memory only."""
+        live = self.world.advance_progress()
+        if live is not None:
+            return live
+        if self.pending_world is not None and self.world.final_progress is not None:
+            return dict(self.world.final_progress)
+        return None
+
+    def _advance_delivered(self) -> None:
+        """Forget the closing object of the last advance once nothing waits for it any more.
+        Otherwise a later world change that this server did not start (advance.py or reset.sh
+        run from a terminal) would be published with the end state of an older run."""
+        if self.pending_world is None and not self.world.advancing:
+            self.world.final_progress = None
+
+    def snapshot(self, rows=None, events=None, deltas=None, feedback=None, advance=None) -> dict:
         # "advancing" stays true until the new week is on the board: a world loaded between
         # ticks waits in pending_world for the next tick, and the HUD must not flip early.
+        try:
+            adv = advance if advance is not None else self.advance_public()
+        except Exception:                      # progress is decoration: never break a tick over it
+            adv = None
+        reveal = None
+        if self.state.phase == "ended":
+            try:
+                reveal = match.reveal_data(self.state, self.match_reveal)
+            except Exception:
+                log.exception("could not build the end-of-match reveal")
         return st.snapshot(self.state, rows, events,
-                           advancing=self.world.advancing or self.pending_world is not None)
+                           advancing=self.world.advancing or self.pending_world is not None,
+                           advance=adv, deltas=deltas, feedback=feedback, reveal=reveal)
 
-    async def publish(self, rows=None, events=None) -> None:
-        msg = self.snapshot(rows, events)
+    async def publish(self, rows=None, events=None, deltas=None, feedback=None, advance=None) -> None:
+        msg = self.snapshot(rows, events, deltas, feedback, advance)
         if self.state.phase == "running":
             self.unseen_ids.update(r["ledger_id"] for r in msg["ledger"] if r.get("action") == "UNSEEN")
         else:
@@ -241,8 +272,8 @@ class Game:
                 # the board; the next match deals from the new world.
                 self.pending_world = None
                 self.pending_events.append({"kind": "info", "text": (
-                    f"World data replaced: now {data.asof} ({data.world.get('score_source')}). This match "
-                    f"keeps its {board} cards; the next match deals from the new world.")})
+                    f"World data replaced: now as of {data.asof}, danger set by {match.source_name(data.world)}. "
+                    f"This match keeps its {board} cards; the next match deals from the new data.")})
                 return
             self.pending_world = data          # applied at the start of the next tick
         else:
@@ -252,16 +283,33 @@ class Game:
     def _on_advance_result(self, res: dict) -> None:
         ok = bool(res.get("ok"))
         msg = str(res.get("message") or "")[:200]
-        text = (f"Advance finished: world is now {res.get('asof_date')}, scores from {res.get('score_source')}."
+        text = (f"Advance finished: data as of {res.get('asof_date')}, danger set by {match.source_name(res)}."
                 if ok else f"Advance did not complete: {msg or 'no message'}")
-        self._spawn(self.publish(events=[{"kind": "info", "text": text}]))
+        # This one message carries the closing progress object (stage "done" or "failed").
+        final = self.world.final_progress
+        self._spawn(self.publish(events=[{"kind": "info", "text": text}],
+                                 advance=dict(final) if final else None))
+        self._advance_delivered()      # kept only while its new week still waits in pending_world
 
     def advance(self) -> dict:
         res = self.world.start_advance()
         text = ("Advancing the world one week in the background." if res.get("ok")
                 else f"Advance not started: {res.get('message')}")
         self._spawn(self.publish(events=[{"kind": "info", "text": text}]))
+        if res.get("ok"):
+            self._spawn(self._advance_heartbeat())
         return res
+
+    async def _advance_heartbeat(self) -> None:
+        """Outside a running match nothing ticks, so publish the progress here."""
+        while self.world.advancing:
+            await asyncio.sleep(ADVANCE_HEARTBEAT_SECONDS)
+            if self.world.advancing and self.state.phase != "running":
+                await self.publish()
+
+    def _reveal_of(self, data) -> dict[str, dict]:
+        """A serving folder's reveal entries, each stamped with the week it was computed for."""
+        return {cve: {**r, "asof_date": data.asof} for cve, r in (data.reveal or {}).items()}
 
     # ------------------------------------------------------------ match control
     def start_match(self, seed: int | None = None) -> dict:
@@ -276,8 +324,9 @@ class Game:
         self.state = st.new_match(self.world.current, seed=seed, match_id=_new_match_id(), tuning=tuning)
         self.rng = random.Random(seed)
         self.pending_world = None
+        self._advance_delivered()
         self.pending_events = []
-        self.match_reveal = dict(self.world.current.reveal)   # grows with each week dropped mid-match
+        self.match_reveal = self._reveal_of(self.world.current)   # grows with each week dropped mid-match
         self.human_inputs = {}
         self.unseen_ids = set()
         self._loop_task = asyncio.get_running_loop().create_task(self._run_match())
@@ -292,6 +341,7 @@ class Game:
                 pass
         self.state = self._lobby_state()
         self.pending_world = None
+        self._advance_delivered()
         self.human_inputs = {}
         await self.publish(events=[{"kind": "info", "text": "Back to the lobby."}])
         return {"ok": True, "phase": "lobby"}
@@ -360,13 +410,14 @@ class Game:
     # ------------------------------------------------------------ the tick loop
     async def _run_match(self) -> None:
         state = self.state
-        await self.publish(events=[{"kind": "info", "text": f"Match {state.match_id} started on world "
-                                                            f"{state.world.get('asof_date')} ({state.world.get('score_source')})."}])
+        await self.publish(events=[{"kind": "info", "text": f"Match started: data as of {state.world.get('asof_date')}, "
+                                                            f"danger set by {match.source_name(state.world)}."}])
         try:
             while state.phase == "running" and state is self.state:
                 t0 = time.monotonic()
                 humans = self.take_human_actions(state)
                 pending, self.pending_world = self.pending_world, None
+                pending_taken = pending is not None
                 if pending is not None and state.tick >= state.ticks_total - state.tuning.world_change_cutoff:
                     pending = None             # too late in the match: the next match deals from it
                 res = match.run_tick(state, humans, self.rng, new_world=pending)
@@ -384,13 +435,15 @@ class Game:
                 late, self.pending_events = self.pending_events, []
                 events = late + list(res.events)
                 if pending is not None:
-                    self.match_reveal.update(pending.reveal)
+                    self.match_reveal.update(self._reveal_of(pending))
                 if state.phase == "ended":
                     # the board holds cards from the starting week and from any mid-match drop
                     rv = match.reveal_text(state, self.match_reveal)
                     if rv:
                         events.append({"kind": "info", "text": rv})
-                await self.publish(res.rows, events)
+                await self.publish(res.rows, events, res.deltas, res.feedback)
+                if pending_taken:
+                    self._advance_delivered()   # its new week is on the board now
                 await asyncio.sleep(max(0.0, self.tick_seconds - (time.monotonic() - t0)))
         except asyncio.CancelledError:
             raise
@@ -448,7 +501,8 @@ async def api_state():
 @app.get("/api/world")
 async def api_world():
     return {**game.world.current.world, "advancing": game.world.advancing or game.pending_world is not None,
-            "data_source": game.world.current.source, "last_advance": game.world.last_result}
+            "data_source": game.world.current.source, "last_advance": game.world.last_result,
+            "advance": game.advance_public()}
 
 
 @app.get("/api/status")

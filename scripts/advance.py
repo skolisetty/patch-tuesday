@@ -13,7 +13,8 @@ Python inside WSL (Bruin is run through `bash -lc`). Usage:
 The last stdout line is always one JSON object (docs/CONTRACTS.md):
     {"ok": bool, "asof_date": "...", "score_source": "...", "challenger_p_at_50": n,
      "epss_p_at_50": n, "gate_passed": bool, "message": "..."}
-Progress goes to stderr; the full Bruin output goes to logs/advance/<timestamp>-<label>.log.
+Progress goes to stderr; the full Bruin output is streamed, line by line while Bruin runs, to
+logs/advance/<timestamp>-<label>.log (the game server reads it for its live pipeline strip).
 
 The outcome is decided from serving/world.json (it has "moved" when it carries the new asof_date
 AND a new pipeline_run_id) together with the checks Bruin reports as failed, never from Bruin's exit
@@ -94,13 +95,37 @@ def db_path() -> str | None:
 def shell(cmd: str, log_file: Path | None = None) -> tuple[int, str]:
     """Run a bash command line in WSL (from Windows) or locally (inside WSL)."""
     argv = ["wsl", "-e", "bash", "-lc", cmd] if IS_WINDOWS else ["bash", "-lc", cmd]
-    proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out = proc.stdout.decode("utf-8", errors="replace")
-    if log_file is not None:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(log_file, "a", encoding="utf-8") as fh:
-            fh.write(f"$ {cmd}\n{out}\n[exit {proc.returncode}]\n")
-    return proc.returncode, out
+    return stream(argv, log_file, f"$ {cmd}\n")
+
+
+def stream(argv: list[str], log_file: Path | None, header: str = "") -> tuple[int, str]:
+    """Run argv and return (exit code, its whole stdout+stderr as text).
+
+    With a log file, the output is appended to it LINE BY LINE AS IT ARRIVES (flushed after every
+    line), so the game server can show live progress from the log while Bruin is still running.
+    The finished file reads exactly as before: header, the output, a blank line, "[exit N]".
+    Decisions are still taken from the returned text after the process has ended, never from the
+    file."""
+    if log_file is None:
+        proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return proc.returncode, proc.stdout.decode("utf-8", errors="replace")
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    parts: list[str] = []
+    with open(log_file, "a", encoding="utf-8") as fh:
+        fh.write(header)
+        fh.flush()
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        try:
+            for raw in iter(proc.stdout.readline, b""):
+                text = raw.decode("utf-8", errors="replace")
+                parts.append(text)
+                fh.write(text)
+                fh.flush()
+        finally:
+            proc.stdout.close()
+            rc = proc.wait()
+        fh.write(f"\n[exit {rc}]\n")
+    return rc, "".join(parts)
 
 
 def bruin(args: list[str], log_file: Path, dry_run: bool) -> tuple[int, str]:
