@@ -16,6 +16,111 @@ its danger and whether the bug is already known to be exploited.
 
 ![Patch Tuesday mid-match. Top bar: both scores with their income per tick, the time left, and the data panel with the date the data is as of and the gate verdict. Centre: the 3D board of 20 machines, one of them breached (red). Right: the Agents tab, one card per AI agent with what it is doing and why. Bottom: the two player panels, each with a "next best move" line and the cards on its machine, and the events strip.](docs/img/game.png)
 
+## Sponsor tools: where each one sits
+
+Four hackathon sponsor tools are part of this project. The coloured boxes show where each one
+works; everything else is our own code.
+
+```mermaid
+flowchart LR
+  DATA["Real public data<br/>NVD, CISA KEV,<br/>FIRST EPSS, MITRE ATT&CK"]
+  P1["BRUIN<br/>Weekly pipeline, 26 assets<br/>replays a real week, retrains<br/>our model, runs the gate"]
+  GAME["THE GAME (our code)<br/>game server + 3D screen<br/>5 AI agents, Coach,<br/>human players"]
+  P2["BRUIN<br/>Coach pipeline, 16 assets, 261 checks<br/>finds the team's weakest point"]
+  P3["BRUIN<br/>Ledger pipeline<br/>every agent decision into the warehouse"]
+  BANDROOM["BAND<br/>room where Coach, the defenders and<br/>the humans talk; a specialist agent joins"]
+  TELEM["TELEM<br/>live web search:<br/>public reporting on a card"]
+  ADAL["ADAL<br/>the demo video"]
+
+  DATA --> P1
+  P1 -- "danger and priority<br/>of every card" --> GAME
+  GAME -- "match log + board" --> P2
+  P2 -- "checked team figures" --> GAME
+  GAME -- "decision log" --> P3
+  GAME <-- "analysis, approval,<br/>specialist joins" --> BANDROOM
+  GAME <-- "Hunter asks,<br/>reports come back" --> TELEM
+  GAME -. "recorded and edited in" .-> ADAL
+
+  classDef bruin fill:#ffe9a8,stroke:#b7791f,stroke-width:2px,color:#3b2a00
+  classDef band fill:#c9f2d9,stroke:#1f8a5a,stroke-width:2px,color:#0b3d26
+  classDef telem fill:#cfe5ff,stroke:#1d5fbf,stroke-width:2px,color:#0b2a5c
+  classDef adal fill:#f3d4ff,stroke:#8a2fb8,stroke-width:2px,color:#3d0f57
+  classDef game fill:#1f2937,stroke:#111827,stroke-width:2px,color:#ffffff
+  class P1,P2,P3 bruin
+  class BANDROOM band
+  class TELEM telem
+  class ADAL adal
+  class GAME game
+```
+
+| Colour | Sponsor | Role in one line |
+|---|---|---|
+| Yellow | **Bruin** | Decides how dangerous every card is, coaches the team, and keeps the decision log |
+| Green | **BAND** | The room where agents and humans talk, and through which a new agent joins the team |
+| Blue | **Telem** | Gives an agent live public reporting on a vulnerability |
+| Purple | **AdaL** | Produces the demo video |
+
+### Bruin
+
+Bruin is the data pipeline tool, and here it is the referee of the game. We run three Bruin
+pipelines on DuckDB.
+
+- **Weekly pipeline (26 assets).** It replays real vulnerability data one real week at a time,
+  hiding everything after the simulated date. Each week it retrains our model and runs **the
+  gate**: a blocking check that lets our model set the danger only if it beats the EPSS baseline
+  on held-out data. If the gate fails, Bruin skips everything after it and the game keeps the
+  baseline. This happened for real: the gate blocked the model once in 12 weeks, plus a tie on day 0.
+- **Coach pipeline (16 assets, 261 checks, about 3 seconds).** During a match it takes the
+  decision log and the board and computes what the Blue team is weakest at. Its own blocking
+  check recomputes Red's income from the log and refuses to answer unless it matches the game's
+  score.
+- **Ledger pipeline.** Every decision by every agent is loaded into the warehouse for analysis.
+
+The pipelines run live from the game: pressing **Advance week** starts a real Bruin run, and the
+screen shows it step by step. Bruin features in use include SQL and Python assets, seeds,
+incremental `time_interval` loads, `delete+insert` and `ddl` strategies, blocking custom checks,
+pipeline variables, tags, a glossary, lineage and a 12-week backfill.
+Details: [docs/PIPELINE.md](docs/PIPELINE.md), [docs/MODEL_AND_GATE.md](docs/MODEL_AND_GATE.md).
+
+### BAND
+
+BAND is where the agents and the humans talk, and how a new agent joins the team. We call the use
+case **Call for backup**.
+
+- Coach, Triage, Patcher, Hunter and three specialists are **separate BAND agents**. Coach and
+  the three defenders share one room with the human players.
+- At a checkpoint Coach posts the team's weakest point with the numbers from the Bruin coach
+  pipeline. The three defenders each add a line from their own side.
+- Coach recommends one specialist and **asks the humans to approve it in the room**. A human
+  replies there.
+- The specialist is then **added to the room**, introduces itself, and walks onto the board as a
+  fourth Blue agent. At the end Coach posts what changed after it joined.
+- If a player goes quiet for 30 seconds, Coach says so in the room and hands that player's robot
+  to the Hardener routine until they return.
+- A second room carries a running feed of match highlights.
+
+Under the hood this uses BAND's agent registration, rooms, messages with @mentions, adding a
+participant, and each agent's inbox with acknowledgements. Details: [docs/BAND.md](docs/BAND.md).
+
+### Telem
+
+Telem gives agents live web data. The Hunter agent uses it for an **INTEL** move.
+
+- In a quiet moment the Hunter asks Telem for public reporting on one card's CVE, limited to the
+  simulated week.
+- The result appears in the events strip and in the Hunter's reasoning, for example "Hunter found
+  2 public reports on CVE-2026-32596 this world week", with the reporting sites and dates.
+- Headlines and anything that looks like exploit material are dropped; only counts, sites and
+  dates are shown.
+- Searches are capped per match and per server run, so a demo cannot run up a bill.
+
+Switch it on with `scripts\start.ps1 -Telem`. Code: `game/intel.py`.
+
+### AdaL
+
+AdaL is the agentic video editor. We use it to produce the project's demo video from a recording
+of a live match, following the timed script in [docs/DEMO.md](docs/DEMO.md).
+
 ## How you win
 
 A match lasts 5 minutes: 150 ticks of 2 seconds, a tick being one step of the game clock. The team
