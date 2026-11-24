@@ -105,7 +105,17 @@ export function createCoach() {
 
     // ---- full box
     setText(title, weakness && clip(weakness.title, 60) ? `Team weakness: ${clip(weakness.title, 60)}` : 'Call for backup');
-    fillList(evidence, (weakness && Array.isArray(weakness.evidence) ? weakness.evidence : []).filter(Boolean).map(String), 'coach-ev');
+    // Where the figures came from: the Bruin coach pipeline, or the game's own calculation.
+    const evLines = (weakness && Array.isArray(weakness.evidence) ? weakness.evidence : []).filter(Boolean).map(String);
+    if (weakness && b.analysis_source === 'bruin') {
+      const checks = Number.isFinite(Number(b.checks_passed)) && b.checks_passed ? `${b.checks_passed} checks passed` : 'checks passed';
+      const secs = Number.isFinite(Number(b.analysis_seconds)) && b.analysis_seconds ? ` in ${Number(b.analysis_seconds).toFixed(1)} s` : '';
+      const run = b.pipeline_run_id ? ` (run ${clip(String(b.pipeline_run_id), 40)})` : '';
+      evLines.unshift(`Analysed by a Bruin pipeline: ${checks}${secs}${run}.`);
+    } else if (weakness && b.analysis_source === 'local') {
+      evLines.unshift('Analysed locally (Bruin not available).');
+    }
+    fillList(evidence, evLines, 'coach-ev');
     fillList(
       players,
       (Array.isArray(b.players) ? b.players : []).map((p) => p && p.line).filter(Boolean).map(String),

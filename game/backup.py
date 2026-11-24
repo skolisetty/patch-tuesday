@@ -384,9 +384,17 @@ def _scores(n: dict) -> dict[str, float]:
     return {"slow_response": round(slow, 3), "exposure": round(expo, 3), "blind_spots": round(blind, 3)}
 
 
-def analyse(state: MatchState, ledger_rows: list[dict]) -> Analysis:
+SIGHTING_KEYS = ("red_ticks", "hidden_ticks", "hidden_share", "detections")
+
+
+def analyse(state: MatchState, ledger_rows: list[dict], override: dict | None = None) -> Analysis:
     """Work out, from the match so far, what the Blue team is weakest at. Every number in the
-    sentences is computed here and kept in Analysis.numbers."""
+    sentences is computed here and kept in Analysis.numbers.
+
+    override: the same figures from the Bruin coach pipeline (coach_bruin.as_backup_numbers).
+    When given they REPLACE the local team figures, so the scoring and the sentences below are
+    built from the pipeline's numbers. Sighting figures are taken only when the pipeline could
+    derive them exactly ("sightings_exact")."""
     rows = [r for r in (ledger_rows or []) if r.get("team") == "blue"]   # red rows are never read
     tr = state.track
     sc = state.score
@@ -411,21 +419,31 @@ def analyse(state: MatchState, ledger_rows: list[dict]) -> Analysis:
         "breaches_unmonitored": sum(1 for b in breaches if not b["monitored"]),
         "detections": len(tr.get("detections", [])),
     }
+    if override:
+        exact = bool(override.get("sightings_exact"))
+        for k in list(numbers):
+            if k in override and override[k] is not None and (exact or k not in SIGHTING_KEYS):
+                numbers[k] = override[k]
     scores = _scores(numbers)
 
     n = numbers
+    nb = n["breaches"]
+    red_pts, blue_pts = n["red"], n["blue"]
+    now_n, now_names = n["breached_now"], list(n["breached_now_names"])
+    hot_n = n["open_hot"]
+    had_breach = bool(eps) or n["longest_breach_ticks"] > 0
     ev = {"slow_response": [], "exposure": [], "blind_spots": []}
     ev["slow_response"].append(
         f"Red earned {_num(n['held'])} of its {_num(n['red'])} points from machines left breached."
-        if sc.red > 0 else "Red has not scored yet.")
+        if red_pts > 0 else "Red has not scored yet.")
     ev["slow_response"].append(
         f"A breached machine stayed breached for {n['avg_breach_ticks']:.1f} ticks on average (longest {n['longest_breach_ticks']})."
-        if eps else "No machine has been breached yet.")
+        if had_breach else "No machine has been breached yet.")
     ev["slow_response"].append(
-        f"{len(now)} {_s(len(now), 'machine is', 'machines are')} breached right now ({', '.join(x.name for x in now)})."
-        if now else "No machine is breached right now.")
+        f"{now_n} {_s(now_n, 'machine is', 'machines are')} breached right now ({', '.join(now_names)})."
+        if now_n else "No machine is breached right now.")
     ev["exposure"].append(
-        f"{len(hot)} open {_s(len(hot), 'card')} with danger of 30% or more {_s(len(hot), 'sits', 'sit')} on machines worth 2 or more.")
+        f"{hot_n} open {_s(hot_n, 'card')} with danger of 30% or more {_s(hot_n, 'sits', 'sit')} on machines worth 2 or more.")
     ev["exposure"].append(
         f"{n['breaches_long_open']} of {nb} {_s(nb, 'breach', 'breaches')} came through a card that had been open and untouched for 10 ticks or more."
         if nb else "No breach yet, so no card has been used against us.")
@@ -440,7 +458,7 @@ def analyse(state: MatchState, ledger_rows: list[dict]) -> Analysis:
     ev["blind_spots"].append(f"An attacker has been detected {n['detections']} {_s(n['detections'], 'time')}.")
 
     key = max(WEAKNESSES, key=lambda k: (scores[k] - THRESHOLDS[k], -WEAKNESSES.index(k)))
-    team_ok = sc.blue > sc.red and all(scores[k] <= THRESHOLDS[k] for k in WEAKNESSES)
+    team_ok = blue_pts > red_pts and all(scores[k] <= THRESHOLDS[k] for k in WEAKNESSES)
     rec = SPECIALIST_FOR[key]
 
     agent_lines, agent_stats = _agent_lines(state, rows, n["detections"])
@@ -452,7 +470,7 @@ def analyse(state: MatchState, ledger_rows: list[dict]) -> Analysis:
     numbers["agents"] = agent_stats
     numbers["players"] = player_stats
 
-    head = f"Analysis at tick {state.tick}: Red {_num(sc.red)}, Blue {_num(sc.blue)}."
+    head = f"Analysis at tick {n['tick']}: Red {_num(red_pts)}, Blue {_num(blue_pts)}."
     if team_ok:
         verdict = f"The team is holding up and nothing stands out; the nearest thing to a weak point is {TITLES[key].lower()}."
     else:
@@ -637,7 +655,11 @@ class BackupFlow:
     to "unavailable" for the rest of the match.
     """
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, analyst=None):
+        # analyst: optional object with available() -> bool, request(state, rows) -> handle and
+        # poll(handle) -> None | {"ok", "numbers", "pipeline_run_id", "checks_passed", "seconds"}.
+        # The server passes the Bruin coach pipeline; tests and the simulator pass nothing.
+        self.analyst = analyst
         if isinstance(config, BackupConfig):
             self.cfg = config
         elif isinstance(config, dict):
@@ -669,6 +691,12 @@ class BackupFlow:
         self._reports = 0
         self._pending_report: list[str] = []
         self._detections_seen = 0
+        self._handle = None                 # a Bruin coach pipeline run in progress
+        self._handle_deadline: int | None = None
+        self.analysis_source: str | None = None       # "bruin" | "local"
+        self.pipeline_run_id: str | None = None
+        self.checks_passed: int | None = None
+        self.analysis_seconds: float | None = None
         self.says = []
         if state is not None:
             state.backup = self.public(state)
@@ -724,11 +752,48 @@ class BackupFlow:
         return state.tick > c.early_after_tick and state.score.red - state.score.blue >= c.early_lead
 
     def _start_analysis(self, state: MatchState, all_rows: list[dict], out: list[Say]) -> None:
-        c = self.cfg
-        a = analyse(state, all_rows)
-        self.analysis = a
+        """The checkpoint. With a Bruin analyst the match log goes through the coach pipeline first
+        and the analysis is published when its figures arrive (see _poll_analyst); otherwise the
+        local figures are used at once."""
         self.checkpoint_tick = state.tick
         self._status = "analysing"
+        an = self.analyst
+        try:
+            use_bruin = an is not None and bool(an.available())
+        except Exception:
+            use_bruin = False
+        if use_bruin:
+            self._handle = an.request(state, all_rows)
+            self._handle_deadline = state.tick + max(2, int(getattr(an, "wait_ticks", 10)))
+            self._emit(out, Say("coach", "Running the team's match log through the Bruin coach pipeline...",
+                                "blue_agents", "analysis"))
+            self._event(state, "coach", "Coach is running the match log through the Bruin coach pipeline.")
+            return
+        self._publish_analysis(state, all_rows, out, None)
+
+    def _poll_analyst(self, state: MatchState, all_rows: list[dict], out: list[Say]) -> None:
+        try:
+            res = self.analyst.poll(self._handle)
+        except Exception:
+            res = {"ok": False}
+        if res is None and state.tick < (self._handle_deadline or 0):
+            return                                   # still running
+        self._handle = None
+        override = None
+        if res and res.get("ok") and isinstance(res.get("numbers"), dict):
+            override = res["numbers"]
+            self.pipeline_run_id = res.get("pipeline_run_id")
+            self.checks_passed = res.get("checks_passed")
+            self.analysis_seconds = res.get("seconds")
+        self._publish_analysis(state, all_rows, out, override)
+
+    def _publish_analysis(self, state: MatchState, all_rows: list[dict], out: list[Say], override: dict | None) -> None:
+        c = self.cfg
+        a = analyse(state, all_rows, override)
+        self.analysis_source = "bruin" if override else "local"
+        if override and self.checks_passed:
+            a.text += f" (Bruin coach pipeline, {self.checks_passed} checks passed.)"
+        self.analysis = a
         self._emit(out, Say("coach", a.text, "blue_agents", "analysis"))
         t = state.tick
         for i, aid in enumerate(("blue1", "blue2", "blue3"), start=1):
@@ -820,6 +885,8 @@ class BackupFlow:
                 return self._done(state, out)
             if self._status == "watching" and self._should_trigger(state):
                 self._start_analysis(state, all_rows or [], out)
+            elif self._status == "analysing" and self._handle is not None and self.analysis is None:
+                self._poll_analyst(state, all_rows or [], out)
             while self._queue and self._queue[0][0] <= state.tick:
                 _, item = self._queue.pop(0)
                 if item == "ask":
@@ -930,4 +997,8 @@ class BackupFlow:
             "after": dict(self.after) if self.after else None,
             "team_ok": bool(a.team_ok) if a else None,
             "reason": self.unavailable_reason,
+            "analysis_source": self.analysis_source,
+            "pipeline_run_id": self.pipeline_run_id,
+            "checks_passed": self.checks_passed,
+            "analysis_seconds": self.analysis_seconds,
         }
