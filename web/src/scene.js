@@ -80,6 +80,9 @@ const SLOT = {
   red2: [1.55, 2.3],
 };
 
+const HOP_HEIGHT = 0.7; // how high a character hops on each step between machines
+const JUMP_HEIGHT = 1.1;
+const JUMP_MS = 480;
 const LOOPING = new Set(['Idle', 'Walking', 'Running', 'Dance']);
 
 function nodeCenter(id) {
@@ -758,8 +761,13 @@ class ActorView {
       }
       const e = k * k * (3 - 2 * k);
       this.group.position.lerpVectors(this.from, this.to, e);
+      this.group.position.y = this.to.y + Math.sin(k * Math.PI) * HOP_HEIGHT;   // every step is a hop
     } else {
       this.targetYaw = this.restYaw;
+      if (this.inited) {
+        const j = (now - (this.jumpT0 ?? -1e9)) / JUMP_MS;                     // Space: jump on the spot
+        this.group.position.y = this.to.y + (j >= 0 && j < 1 ? Math.sin(j * Math.PI) * JUMP_HEIGHT : 0);
+      }
     }
     // Turn the short way round.
     let d = this.targetYaw - this.yaw;
@@ -891,7 +899,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   const params = new URLSearchParams(location.search);
   const yaw = THREE.MathUtils.degToRad(Number(params.get('yaw')) || 0);
   const pitch = THREE.MathUtils.degToRad(Math.min(80, Math.max(25, Number(params.get('pitch')) || 36)));
-  const camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.5, 400);
+  const camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.5, 400);   // a wider lens reads as more depth
   const camDir = new THREE.Vector3(
     Math.sin(yaw) * Math.cos(pitch),
     Math.sin(pitch),
@@ -1376,6 +1384,11 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     ok: true,
     applyState,
     setDestination,
+    // Space bar: that character jumps on the spot (ignored while it is walking).
+    jump(actorId) {
+      const view = actors.get(actorId);
+      if (view && !view.moving) view.jumpT0 = performance.now();
+    },
     setTickMs(ms) {
       if (ms > 100) tickMs = ms;
     },

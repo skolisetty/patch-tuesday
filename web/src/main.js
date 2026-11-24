@@ -101,6 +101,9 @@ const input = createInput({
   },
   getPatchCve: (player) => hud.getPatchCve(player),
   onFeedback: (player, text, kind) => hud.setInputFeedback(player, text, kind),
+  // One player per browser: the seat this browser holds, else the one picked with the mouse.
+  getMe: () => (seats.isMine(1) ? 1 : seats.isMine(2) ? 2 : seat),
+  onJump: (player) => scene.jump && scene.jump(player === 2 ? 'p2' : 'p1'),
   onDestination(player, nodeId, why) {
     scene.setDestination(player === 2 ? 'p2' : 'p1', nodeId);
     if (why === 'start') hud.setInputFeedback(player, `Walking to ${machineName(nodeId)}. Press any of your keys to stop.`, 'note');

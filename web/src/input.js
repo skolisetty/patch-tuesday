@@ -57,7 +57,7 @@ function label(a) {
  * onDestination(player, machineId | null, why) reports the walk starting and ending
  * (why: 'start' | 'arrived' | 'cancelled' | 'stuck' | 'ended').
  */
-export function createInput({ send, getPatchCve, onFeedback, onDestination }) {
+export function createInput({ send, getPatchCve, onFeedback, onDestination, getMe, onJump }) {
   let phase = 'lobby';
   let tickMs = 2000;
   let lastTick = null;
@@ -147,11 +147,21 @@ export function createInput({ send, getPatchCve, onFeedback, onDestination }) {
   }
 
   function onKeyDown(e) {
-    const a = KEYMAP[e.code];
-    if (!a) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return; // leave browser shortcuts alone
+    // One player per browser: both key sets (W A S D / arrows, E / Enter, ...) drive the player
+    // this browser plays, and Space makes that robot jump.
     const tgt = e.target;
-    if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
+    const typing = tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable);
+    if (e.code === 'Space' && !typing && !(e.ctrlKey || e.metaKey || e.altKey)) {
+      if (tgt && tgt.tagName === 'BUTTON') return; // Space on a focused button presses it
+      e.preventDefault();
+      if (!e.repeat && onJump) onJump(getMe ? getMe() : 1);
+      return;
+    }
+    const a0 = KEYMAP[e.code];
+    if (!a0) return;
+    const a = getMe ? { ...a0, player: getMe() === 2 ? 2 : 1 } : a0;
+    if (e.ctrlKey || e.metaKey || e.altKey) return; // leave browser shortcuts alone
+    if (typing) return;
     // Stops arrow keys scrolling the page, "/" opening quick find and
     // Enter re-triggering a focused button.
     e.preventDefault();
