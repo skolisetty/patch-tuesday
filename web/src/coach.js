@@ -96,7 +96,7 @@ export function createCoach() {
       else if (state.phase === 'ended') text = 'Coach did not call for backup in this match.';
       else {
         const cp = Number(b.checkpoint_tick);
-        const when = Number.isFinite(cp) && cp > tick ? `Analysis at tick ${cp}, or write` : 'For an analysis now, write';
+        const when = Number.isFinite(cp) && cp > tick ? `It steps in if Red starts to dominate, or at tick ${cp}. To ask now, write` : 'For an analysis now, write';
         text = `Coach is ${state.phase === 'lobby' ? 'on the team' : 'watching'}. ${when} @coach analyze in ${where}.`;
       }
       setText(line, text);
@@ -104,7 +104,8 @@ export function createCoach() {
     }
 
     // ---- full box
-    setText(title, weakness && clip(weakness.title, 60) ? `Team weakness: ${clip(weakness.title, 60)}` : 'Call for backup');
+    const rescue = b.trigger === 'red_dominating';
+    setText(title, weakness && clip(weakness.title, 60) ? `${rescue ? 'Red is dominating. Weakness' : 'Team weakness'}: ${clip(weakness.title, 60)}` : (rescue ? 'Red is dominating: Coach steps in' : 'Call for backup'));
     // Where the figures came from: the Bruin coach pipeline, or the game's own calculation.
     const evLines = (weakness && Array.isArray(weakness.evidence) ? weakness.evidence : []).filter(Boolean).map(String);
     if (weakness && b.analysis_source === 'bruin') {

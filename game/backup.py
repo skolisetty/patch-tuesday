@@ -546,6 +546,8 @@ class BackupConfig:
     max_reports: int = 8
     early_lead: float = 15.0          # Red leading by this much ...
     early_after_tick: int = 20        # ... after this tick triggers the analysis early
+    dominate_nodes: int = 0           # ... or Red holding this many machines at once (0 = not used)
+    rescue_wait_ticks: int = 0        # answer window when Red is dominating (0 = the normal window)
     last_ticks: int = 30              # no checkpoint in the last N ticks of a match
     human_min_tick: int = 10          # a human request before the attackers move waits until this tick
     room: str = ROOM_NAME
@@ -566,7 +568,11 @@ class BackupConfig:
         if ticks_total and ticks_total < 150:
             # A short match: Coach looks early and waits briefly, so the specialist still gets to play.
             n = ticks_total
-            cfg.checkpoint_tick = min(cfg.checkpoint_tick, max(4, n // 5))
+            # Coach's main cue is Red dominating; the fixed checkpoint is only the fallback.
+            cfg.checkpoint_tick = max(4, n // 3)
+            cfg.early_lead = min(cfg.early_lead, max(4.0, round(cfg.early_lead * n / 90.0)))
+            cfg.dominate_nodes = 2
+            cfg.rescue_wait_ticks = 3
             cfg.wait_ticks = min(cfg.wait_ticks, max(3, n // 6))
             cfg.last_ticks = min(cfg.last_ticks, max(3, n // 5))
             cfg.human_min_tick = min(cfg.human_min_tick, max(2, n // 10))
@@ -685,6 +691,7 @@ class BackupFlow:
         self.match_id = state.match_id if state is not None else None
         self.analysis: Analysis | None = None
         self.checkpoint_tick: int | None = None      # the tick the analysis actually ran
+        self.trigger: str | None = None              # checkpoint | red_dominating | human
         self.asked_tick: int | None = None
         self.expires_tick: int | None = None
         self.chosen: str | None = None
@@ -756,10 +763,33 @@ class BackupFlow:
         if not self._may_start(state):
             return False
         if self._human_asked and state.tick >= c.human_min_tick:
+            self.trigger = "human"
+            return True
+        if self._dominating(state):
+            self.trigger = "red_dominating"
             return True
         if state.tick >= c.checkpoint_tick:
+            self.trigger = "checkpoint"
             return True
-        return state.tick > c.early_after_tick and state.score.red - state.score.blue >= c.early_lead
+        return False
+
+    def _red_holds(self, state: MatchState) -> int:
+        return sum(1 for n in state.nodes if n.state == "compromised")
+
+    def _dominating(self, state: MatchState) -> bool:
+        """Red is running away with the match: a clear lead, or several machines held at once."""
+        c = self.cfg
+        if state.tick <= c.early_after_tick:
+            return False
+        if state.score.red - state.score.blue >= c.early_lead:
+            return True
+        return c.dominate_nodes > 0 and self._red_holds(state) >= c.dominate_nodes
+
+    def _wait(self) -> int:
+        c = self.cfg
+        if self.trigger == "red_dominating" and c.rescue_wait_ticks > 0:
+            return min(c.wait_ticks, c.rescue_wait_ticks)     # a rescue does not wait long for an answer
+        return c.wait_ticks
 
     def _start_analysis(self, state: MatchState, all_rows: list[dict], out: list[Say]) -> None:
         """The checkpoint. With a Bruin analyst the match log goes through the coach pipeline first
@@ -767,6 +797,12 @@ class BackupFlow:
         local figures are used at once."""
         self.checkpoint_tick = state.tick
         self._status = "analysing"
+        if self.trigger == "red_dominating":
+            held = self._red_holds(state)
+            why = (f"Red is dominating: {state.score.red:g} to {state.score.blue:g}, holding {held} machine{'s' if held != 1 else ''}. "
+                   "I am stepping in to get the team help.")
+            self._emit(out, Say("coach", why, "humans", "analysis"))
+            self._event(state, "coach", "Coach: " + why)
         an = self.analyst
         try:
             use_bruin = an is not None and bool(an.available())
@@ -816,10 +852,10 @@ class BackupFlow:
         a = self.analysis
         self._status = "asked"
         self.asked_tick = state.tick
-        self.expires_tick = state.tick + self.cfg.wait_ticks
+        self.expires_tick = state.tick + self._wait()
         self._emit(out, Say("coach", a.ask_text, "humans", "ask"))
         self._event(state, "coach", f"Coach recommends calling in {SPECIALISTS[a.recommended]}. Reply in BAND within "
-                                    f"{self.cfg.wait_ticks} ticks: yes, {' or '.join(o for o in OPTIONS if o != a.recommended)}, or no.")
+                                    f"{self._wait()} ticks: yes, {' or '.join(o for o in OPTIONS if o != a.recommended)}, or no.")
 
     def _join(self, state: MatchState, role: str, by: str, human: bool, out: list[Say]) -> None:
         name = SPECIALISTS[role]
@@ -841,7 +877,7 @@ class BackupFlow:
         elif human:
             said = f"{first} chose {name} instead of my pick ({SPECIALISTS[rec]}): {name} is joining the Blue team now."
         else:
-            said = f"No reply in {self.cfg.wait_ticks} ticks, so I am calling in {name} myself."
+            said = f"No reply in {self._wait()} ticks, so I am calling in {name} myself."
         self._emit(out, Say("coach", said, "humans", "decision"))
         self._emit(out, Say(role, intro_line(state, role), "team", "join", role=role))
         how = f"approved by {first} via BAND" if human else "no reply in BAND, Coach's own call"
@@ -908,7 +944,7 @@ class BackupFlow:
                     self._join(state, self.analysis.recommended, "Coach (no reply)", False, out)
                 else:
                     self._decline(state, "Coach (no reply)",
-                                  f"No reply in {self.cfg.wait_ticks} ticks. Standing down: no backup this match.", out)
+                                  f"No reply in {self._wait()} ticks. Standing down: no backup this match.", out)
             elif self._status == "joined":
                 self._specialist_reports(state, rows_this_tick or [], out)
             return self._done(state, out)
@@ -994,6 +1030,7 @@ class BackupFlow:
         return {
             "status": self._status,
             "checkpoint_tick": self.checkpoint_tick if self.checkpoint_tick is not None else self.cfg.checkpoint_tick,
+            "trigger": self.trigger if self.checkpoint_tick is not None else None,
             "weakness": ({"key": a.weakness_key, "title": a.title, "evidence": list(a.evidence)} if a else None),
             "players": [dict(p) for p in a.player_lines] if a else [],
             "recommended": a.recommended if a else None,

@@ -367,6 +367,7 @@ The feature is on for a match when all of these hold at match start; otherwise t
 |---|---|
 | `status` | `watching` (before the checkpoint), `analysing` (Coach and the three blue agents are speaking), `asked` (Coach waits for a reply), `joined`, `declined`, `unavailable` (BAND went away or the flow failed; nothing more is asked this match) |
 | `checkpoint_tick` | The tick the analysis is planned for; once it has run, the tick it ran at |
+| `trigger` | Why the analysis started: `red_dominating` (Red leads clearly or holds two or more machines), `checkpoint`, or `human`; null before it runs |
 | `weakness` | null before the analysis, then `{"key":"slow_response|exposure|blind_spots","title":"Slow response","evidence":["Red earned 31 of its 46 points from machines left breached.","..."]}` |
 | `players` | `[{"id":"p1","line":"Player 1 patched 4 cards worth 1.9 and restored nothing."}]`, one entry per human player, empty before the analysis |
 | `recommended`, `options` | Coach's pick and the three specialists a human may name |
