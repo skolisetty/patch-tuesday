@@ -42,6 +42,215 @@ flowchart LR
   D --> E["The game:<br/>2 players + 5 AI agents"]
 ```
 
+## How the system works, in pictures
+
+Three Bruin pipelines sit around one game. The first decides how dangerous every card is, the
+second coaches the team from its own match log, the third keeps every agent decision for analysis.
+
+### 1. The whole system
+
+```mermaid
+flowchart TB
+  subgraph SRC["Real public data (downloaded once)"]
+    direction LR
+    NVD["NVD<br/>CVE records"]
+    KEV["CISA KEV<br/>known exploited"]
+    EPSS["FIRST EPSS<br/>weekly scores"]
+    ATT["MITRE ATT&CK<br/>techniques"]
+    NVD ~~~ KEV ~~~ EPSS ~~~ ATT
+  end
+  P1["PIPELINE 1 · weekly (Bruin)<br/>26 assets: replay one real week,<br/>retrain our model, run the gate"]
+  SERV["serving/*.json<br/>danger and priority of every card"]
+  subgraph GAME["The game"]
+    direction LR
+    SRV["Game server<br/>rules, 5 AI agents, Coach"]
+    WEB["3D screen<br/>2 human players"]
+    SRV <--> WEB
+  end
+  LOG[("Decision log<br/>every move, every reason")]
+  P2["PIPELINE 2 · coach (Bruin)<br/>16 assets, 261 checks:<br/>what is the team weakest at?"]
+  P3["PIPELINE 3 · ledger (Bruin)<br/>all matches into the warehouse"]
+  BAND["BAND room<br/>Coach, 3 defenders, humans,<br/>the specialist who joins"]
+  TELEM["Telem<br/>public reporting on a card"]
+  LLM["LLM<br/>one-sentence reasons"]
+  SRC --> P1 --> SERV --> SRV
+  WEB -. "Advance week" .-> P1
+  SRV --> LOG
+  LOG --> P2 -- "team figures" --> SRV
+  LOG --> P3
+  SRV <-- "analysis, approval,<br/>specialist joins" --> BAND
+  SRV -. "Hunter's INTEL" .-> TELEM
+  SRV -. "reasons" .-> LLM
+```
+
+### 2. Pipeline 1: the weekly pipeline (26 assets)
+
+Each run moves the simulated date forward one real week. Nothing dated after that date can reach
+the features or the model. The gate is a blocking check: if it fails, everything after it is
+skipped and the game keeps the EPSS baseline.
+
+```mermaid
+flowchart LR
+  subgraph L["landing · full mirror"]
+    direction TB
+    l1["nvd_cves"]
+    l2["kev"]
+    l3["attack_techniques<br/>kev_attack_map<br/>cwe_attack_map<br/>cwe_names"]
+  end
+  subgraph R["raw · cut at the simulated date"]
+    direction TB
+    r0["world_clock"]
+    r1["cves"]
+    r2["kev"]
+    r3["epss"]
+  end
+  subgraph S["stg"]
+    s1["cve_technique"]
+  end
+  subgraph F["feat · as-of features"]
+    direction TB
+    f1["snapshots"]
+    f2["snapshot_features"]
+    f3["fingerprints<br/>(leak check)"]
+    f1 --> f2 --> f3
+  end
+  subgraph M["ml · model and gate"]
+    direction TB
+    m1["challenger_scores<br/>(train our model)"]
+    m2{"eval_metrics<br/>THE GATE"}
+    m3["retract · promote<br/>promotions"]
+    m4["sensitivity"]
+    m1 --> m2 --> m3
+    m1 --> m4
+  end
+  subgraph V["serve · what the game reads"]
+    direction TB
+    v1["patch_priority"]
+    v2["attack_cards"]
+    v3["export_cards<br/>export_priority"]
+    v4["sim.reveal"]
+    v5["export_world<br/>(written last)"]
+    v1 --> v2 --> v3 --> v5
+    v2 --> v4 --> v5
+  end
+  L --> R --> F --> M --> V
+  R --> S --> V
+  L --> S
+```
+
+### 3. The gate, and what the game gets
+
+```mermaid
+flowchart TD
+  A["Our model and the EPSS baseline each pick<br/>their 50 most dangerous bugs,<br/>as of 91 days before the simulated date"] --> B{"Which list holds more bugs that<br/>really became known exploited?"}
+  B -- "our model has strictly more,<br/>and at least 10 such bugs exist" --> C["Promote our model:<br/>it sets the danger this week"]
+  B -- "tie, or EPSS has more" --> D["Gate blocked:<br/>the EPSS baseline sets the danger"]
+  B -- "any other check failed<br/>(leak, time travel, consistency)" --> E["Run fails:<br/>the game keeps last week's files"]
+  C --> F["serving/*.json"]
+  D --> F
+```
+
+### 4. One press of "Advance week"
+
+```mermaid
+sequenceDiagram
+  actor H as Players
+  participant W as 3D screen
+  participant S as Game server
+  participant B as Bruin (pipeline 1)
+  H->>W: press Advance week
+  W->>S: advance
+  S->>B: run the next real week (match keeps running)
+  B-->>S: progress, asset by asset
+  S-->>W: pipeline strip: landing, raw, stg, feat, ml, GATE, serve
+  B->>B: retrain our model, run the gate
+  B-->>S: new serving files (gate passed or blocked)
+  S->>W: new cards drop onto machines
+  S->>W: the two attackers start a campaign on them
+```
+
+### 5. Pipeline 2: the coach pipeline (16 assets, 261 checks, about 3 seconds)
+
+It reads two files the game hands over at the checkpoint: the match log so far and the board.
+The reconciliation asset is its gate: Red's income recomputed from the log must equal the game's
+own score, or no analysis is produced.
+
+```mermaid
+flowchart LR
+  subgraph IN["load"]
+    direction TB
+    i1["match_state"]
+    i2["machines"]
+    i3["cards"]
+    i4["ledger_rows"]
+  end
+  subgraph DV["derive"]
+    direction TB
+    d1["monitor_windows"]
+    d2["isolation_ticks"]
+    d3["patches"]
+    d4["breach_spans"]
+    d5["attacker_sightings"]
+  end
+  subgraph ME["metrics"]
+    direction TB
+    g{"score_reconciliation<br/>BLOCKING CHECK"}
+    t["team_metrics"]
+    a["blue_activity"]
+    am["agent_metrics"]
+    pm["player_metrics"]
+    g --> t
+    a --> am
+    a --> pm
+  end
+  subgraph OUT["out"]
+    direction TB
+    o1["summary"]
+    o2["export_metrics<br/>(one JSON file)"]
+    o1 --> o2
+  end
+  IN --> DV --> ME --> OUT
+```
+
+### 6. Call for backup: Coach, Bruin and BAND together
+
+```mermaid
+sequenceDiagram
+  participant S as Game server
+  participant C as Coach
+  participant B as Bruin (pipeline 2)
+  participant R as BAND room
+  actor H as Human in the room
+  participant X as Specialist agent
+  S->>C: checkpoint (or "@coach analyze")
+  C->>B: match log + board
+  B-->>C: team figures, 261 checks passed
+  C->>R: "Our weakest point is exposure..." with the numbers
+  R-->>R: Triage, Patcher and Hunter each add a line
+  C->>R: "I recommend Hardener. Reply yes, or name another."
+  H->>R: "@coach yes"
+  C->>R: adds the specialist to the room
+  X->>R: "Hardener here. Going for the cards worth the most."
+  C->>S: the specialist walks onto the board as a fourth blue agent
+  S->>R: at the end: what changed after it joined
+```
+
+If nobody replies in time, Coach brings in its own recommendation. If a player goes quiet for 30
+seconds, Coach hands that player's robot to the Hardener routine until they press a key again.
+
+### 7. Pipeline 3: the ledger pipeline
+
+```mermaid
+flowchart LR
+  A["Game server"] --> B[("ledger/ledger.jsonl<br/>one row per actor per tick")]
+  B --> C["game.agent_ledger<br/>(Bruin seed asset, with checks)"]
+  C --> D["DuckDB warehouse<br/>query any match"]
+```
+
+More detail: [docs/PIPELINE.md](docs/PIPELINE.md) (every asset and Bruin feature),
+[docs/MODEL_AND_GATE.md](docs/MODEL_AND_GATE.md) (the model and 12 weeks of gate results),
+[docs/BAND.md](docs/BAND.md) (Call for backup).
+
 ## The one idea
 
 1. **Replay real weeks.** The project holds a copy of real vulnerability data up to 2026-11-23. The
