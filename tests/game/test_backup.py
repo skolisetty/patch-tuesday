@@ -588,7 +588,7 @@ def test_status_is_analysing_between_the_analysis_and_the_question(serving):
     flow.reset(s)
     tick_to(flow, s, 41)
     assert flow.status == "analysing" and s.backup["status"] == "analysing" and s.backup["asked_tick"] is None
-    assert flow.on_human(s, "yes", "Suman") == [] and flow.status == "analysing"   # nothing was asked yet
+    assert flow.on_human(s, "yes", "Alex") == [] and flow.status == "analysing"   # nothing was asked yet
 
 
 def test_early_trigger_when_red_leads_by_15_after_tick_20(serving):
@@ -610,8 +610,8 @@ def test_a_human_can_call_coach_early(serving):
     flow = bk.BackupFlow(CFG)
     flow.reset(s)
     tick_to(flow, s, 12)
-    assert flow.on_human(s, "what is the weather", "Suman") == [] and tick_to(flow, s, 14) == []
-    assert flow.on_human(s, "@[[57278e5c-0b51-4e20-a813-5239a395d246]] ANALYZE please", "Suman") == []
+    assert flow.on_human(s, "what is the weather", "Alex") == [] and tick_to(flow, s, 14) == []
+    assert flow.on_human(s, "@[[11111111-2222-4333-8444-555555555555]] ANALYZE please", "Alex") == []
     said = tick_to(flow, s, 15)
     assert [(t, x.kind) for t, x in said] == [(15, "analysis")] and s.backup["checkpoint_tick"] == 15
     for word in ("backup", "help", "analyse"):
@@ -619,7 +619,7 @@ def test_a_human_can_call_coach_early(serving):
         f2 = bk.BackupFlow(CFG)
         f2.reset(s2)
         tick_to(f2, s2, 11)
-        f2.on_human(s2, f"coach {word}", "Suman")
+        f2.on_human(s2, f"coach {word}", "Alex")
         assert tick_to(f2, s2, 12)[0][1].kind == "analysis"
 
 
@@ -628,9 +628,9 @@ def test_a_call_before_the_attackers_move_waits_until_tick_10(serving):
     flow = bk.BackupFlow(CFG)
     flow.reset(s)
     tick_to(flow, s, 4)
-    said = flow.on_human(s, "backup", "Suman")
+    said = flow.on_human(s, "backup", "Alex")
     assert len(said) == 1 and said[0].kind == "decision" and "tick 10" in said[0].text
-    assert flow.on_human(s, "backup", "Suman") == []                       # said once
+    assert flow.on_human(s, "backup", "Alex") == []                       # said once
     assert tick_to(flow, s, 9) == []
     assert [(t, x.kind) for t, x in tick_to(flow, s, 10)] == [(10, "analysis")]
 
@@ -639,7 +639,7 @@ def test_a_call_before_the_attackers_move_waits_until_tick_10(serving):
     ("yes", "yes"), ("OK", "yes"), ("go", "yes"), ("Do it!", "yes"), ("yes please, go ahead", "yes"),
     ("no", "no"), ("None", "no"), ("no, go away", "no"), ("yes, no problem", "yes"),
     ("hardener", "hardener"), ("yes, but the Sentinel please", "sentinel"), ("no... responder", "responder"),
-    ("RESPONDER!!!", "responder"), ("@[[57278e5c-0b51-4e20-a813-5239a395d246]] yes", "yes"),
+    ("RESPONDER!!!", "responder"), ("@[[11111111-2222-4333-8444-555555555555]] yes", "yes"),
     ("", None), ("maybe later", None), ("not now", None), ("nobody knows", None), ("going", None),
     ("yesterday", None), ("<script>alert(1)</script>", None), (None, None), (12345, None),
     ("x" * 200 + " yes", None),                                           # beyond the length cap
@@ -662,19 +662,19 @@ def test_yes_brings_the_recommended_specialist_and_a_name_beats_yes(serving):
     s, flow = asked_flow(serving)
     rec = flow.analysis.recommended
     s.tick = 50
-    assert flow.on_human(s, "hmm, let me think", "Suman Kolisetty") == [] and flow.status == "asked"
-    said = flow.on_human(s, "yes", "Suman Kolisetty")
+    assert flow.on_human(s, "hmm, let me think", "Alex Rivera") == [] and flow.status == "asked"
+    said = flow.on_human(s, "yes", "Alex Rivera")
     assert [(x.speaker, x.kind, x.role, x.mention) for x in said] == [("coach", "decision", None, "humans"),
                                                                      (rec, "join", rec, "team")]
-    assert said[0].text == f"Suman approved: {bk.SPECIALISTS[rec]} is joining the Blue team now."
+    assert said[0].text == f"Alex approved: {bk.SPECIALISTS[rec]} is joining the Blue team now."
     assert said[1].text.startswith(f"{bk.SPECIALISTS[rec]} here.")
     b = s.backup
-    assert (b["status"], b["chosen"], b["by"], b["joined_tick"], b["actor_id"]) == ("joined", rec, "Suman Kolisetty", 50, "blue4")
+    assert (b["status"], b["chosen"], b["by"], b["joined_tick"], b["actor_id"]) == ("joined", rec, "Alex Rivera", 50, "blue4")
     assert b["before"]["ticks"] == 50 and b["after"] is None
     assert s.actors["blue4"].role == rec and s.actors["blue4"].node_id == 19
-    assert st.take_events(s) == [{"kind": "backup", "text": f"{bk.SPECIALISTS[rec]} joined the Blue team (approved by Suman via BAND)."}]
+    assert st.take_events(s) == [{"kind": "backup", "text": f"{bk.SPECIALISTS[rec]} joined the Blue team (approved by Alex via BAND)."}]
     # once per match: more answers change nothing
-    assert flow.on_human(s, "no", "Suman") == [] and flow.on_human(s, "sentinel", "Suman") == []
+    assert flow.on_human(s, "no", "Alex") == [] and flow.on_human(s, "sentinel", "Alex") == []
     assert flow.status == "joined" and len(s.actors) == 8 and s.actors["blue4"].role == rec
 
     s, flow = asked_flow(serving)
@@ -687,12 +687,12 @@ def test_yes_brings_the_recommended_specialist_and_a_name_beats_yes(serving):
 
 def test_no_declines_and_nothing_joins(serving):
     s, flow = asked_flow(serving)
-    said = flow.on_human(s, "no thanks", "Suman")
+    said = flow.on_human(s, "no thanks", "Alex")
     assert [(x.speaker, x.kind) for x in said] == [("coach", "decision")]
-    assert flow.status == "declined" and s.backup["status"] == "declined" and s.backup["by"] == "Suman"
+    assert flow.status == "declined" and s.backup["status"] == "declined" and s.backup["by"] == "Alex"
     assert s.backup["chosen"] is None and s.backup["actor_id"] is None and "blue4" not in s.actors
     assert st.take_events(s) == [{"kind": "backup", "text": "Backup declined."}]
-    assert tick_to(flow, s, 120) == [] and flow.on_human(s, "yes", "Suman") == [] and flow.on_human(s, "analyze", "Suman") == []
+    assert tick_to(flow, s, 120) == [] and flow.on_human(s, "yes", "Alex") == [] and flow.on_human(s, "analyze", "Alex") == []
     assert "blue4" not in s.actors and flow.status == "declined"
 
 
@@ -720,8 +720,8 @@ def test_no_checkpoint_in_the_last_30_ticks(serving):
     flow = bk.BackupFlow(bk.BackupConfig(checkpoint_tick=121))
     flow.reset(s)
     assert tick_to(flow, s, 149) == [] and flow.status == "watching"
-    late = flow.on_human(s, "analyze", "Suman")
-    assert len(late) == 1 and "Too late" in late[0].text and flow.on_human(s, "analyze", "Suman") == []
+    late = flow.on_human(s, "analyze", "Alex")
+    assert len(late) == 1 and "Too late" in late[0].text and flow.on_human(s, "analyze", "Alex") == []
     assert flow.status == "watching" and "blue4" not in s.actors
     # tick 120 is the last one that still starts it (150 - 30)
     s = fresh(serving, clear=False)
@@ -732,7 +732,7 @@ def test_no_checkpoint_in_the_last_30_ticks(serving):
 
 def test_reset_between_matches(serving):
     s, flow = asked_flow(serving)
-    flow.on_human(s, "yes", "Suman")
+    flow.on_human(s, "yes", "Alex")
     assert flow.status == "joined" and flow.says
     s2 = st.new_match(serving, 2, "m-next")
     flow.reset(s2)
@@ -751,7 +751,7 @@ def test_unavailable_stops_the_conversation_and_public_is_none_when_off(serving)
     flow = bk.BackupFlow(CFG)
     flow.reset(s)
     flow.set_unavailable("BAND is not reachable")
-    assert tick_to(flow, s, 70) == [] and flow.on_human(s, "analyze", "Suman") == []
+    assert tick_to(flow, s, 70) == [] and flow.on_human(s, "analyze", "Alex") == []
     assert flow.status == "unavailable" and s.backup["status"] == "unavailable" and "blue4" not in s.actors
     off = bk.BackupFlow(bk.BackupConfig(enabled=False))
     off.reset(s)
@@ -785,7 +785,7 @@ def test_events_reach_the_next_tick_when_nobody_takes_them(serving):
         kinds += [(s.tick, e["kind"]) for e in res.events if e["kind"] in ("coach", "backup")]
         flow.on_tick(s, res.rows, [])
         if flow.status == "asked":
-            flow.on_human(s, "yes", "Suman")
+            flow.on_human(s, "yes", "Alex")
     # analysis at 12 and question at 20 are sent with the following tick (13 and 21); the join right after
     assert kinds == [(13, "coach"), (21, "coach"), (21, "backup")]
     assert all(e["kind"] in st.EVENT_KINDS for e in [{"kind": k} for _, k in kinds])
@@ -825,7 +825,7 @@ def test_specialist_reports_are_spaced_and_capped(serving):
             for x in flow.on_tick(s, res.rows, all_rows):
                 said.append((s.tick, x))
             if flow.status == "asked":
-                flow.on_human(s, "hardener", "Suman")
+                flow.on_human(s, "hardener", "Alex")
         reports = [(t, x) for t, x in said if x.kind == "report"]
         assert all(x.speaker == "hardener" and x.mention == "coach" for _, x in reports)
         assert len(reports) <= flow.cfg.max_reports

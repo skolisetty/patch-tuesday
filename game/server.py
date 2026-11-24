@@ -27,6 +27,40 @@ from .ledger import Ledger
 from .reasons import ReasonEngine
 from .world import WorldManager
 
+class _BruinAnalyst:
+    """Runs the Coach's analysis as the Bruin coach pipeline (pipelines/coach) in the background.
+    The flow falls back to its own figures when this is unavailable, fails or is too slow."""
+
+    def __init__(self, tick_seconds: float):
+        from . import coach_bruin
+        self._cb = coach_bruin
+        secs = tick_seconds if tick_seconds and tick_seconds > 0 else 2.0
+        self.wait_ticks = max(2, int(coach_bruin.timeout_seconds() / secs) + 1)
+        try:
+            coach_bruin.warm()
+        except Exception:
+            pass
+
+    def available(self) -> bool:
+        return bool(self._cb.available())
+
+    def request(self, state, rows):
+        return self._cb.request(state.match_id, state.tick, rows, st.snapshot(state))
+
+    def poll(self, handle):
+        res = self._cb.poll(handle)
+        if res is None:
+            return None
+        out = {"ok": bool(res.get("ok")), "pipeline_run_id": res.get("pipeline_run_id"),
+               "checks_passed": res.get("checks_passed"), "seconds": res.get("seconds")}
+        if out["ok"] and isinstance(res.get("metrics"), dict):
+            try:
+                out["numbers"] = self._cb.as_backup_numbers(res["metrics"])
+            except Exception:
+                out["ok"] = False
+        return out
+
+
 log = logging.getLogger("game.server")
 
 
@@ -275,7 +309,7 @@ class Game:
         if not (self.team.active or self.backup_offline()):
             return None
         from . import backup
-        return backup.BackupFlow(backup.BackupConfig.from_env(self.tick_seconds))
+        return backup.BackupFlow(backup.BackupConfig.from_env(self.tick_seconds), analyst=_BruinAnalyst(self.tick_seconds))
 
     def _start_flow(self, state: st.MatchState):
         try:
