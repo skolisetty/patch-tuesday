@@ -244,6 +244,7 @@ export function createRightPanel() {
   function agentCard(a) {
     const backup = isBackup(a);
     const root = el('div', `agent agent-${a.team === 'red' ? 'red' : 'blue'}${backup ? ' agent-backup' : ''}`);
+    root.dataset.actor = a.id;
     const chip = el('i', 'agent-chip');
     chip.style.background = backup ? BACKUP_CHIP : CHIP[a.id] || (a.team === 'red' ? CHIP.red1 : CHIP.blue1);
     const head = el('div', 'agent-head');
