@@ -1,4 +1,6 @@
 import './style.css';
+import './presentation.css';
+import { createPresentation } from './presentation.js';
 import { createScene } from './scene.js';
 import { createHud } from './hud.js';
 import { createInput } from './input.js';
@@ -83,6 +85,7 @@ const input = createInput({
   },
 });
 setSeat(seat);
+const presentation = createPresentation();
 
 function onState(state) {
   const now = performance.now();
@@ -102,6 +105,8 @@ function onState(state) {
   scene.applyState(state);
   hud.applyState(state);
   input.onState(state);
+  // Presentation observes the completed update; it never changes the authoritative state.
+  try { presentation.applyState(state); } catch (err) { console.warn('Presentation unavailable', err); }
 }
 
 function onMessage(msg) {
@@ -157,3 +162,9 @@ if (params.get('help') === '1') hud.openBriefing();
 
 // Handy when poking at the page from the console.
 window.__pt = { scene, hud, get state() { return lastState; }, mock: MOCK };
+
+window.addEventListener('beforeunload', () => {
+  presentation.dispose();
+  if (scene.dispose) scene.dispose();
+  if (input.dispose) input.dispose();
+});

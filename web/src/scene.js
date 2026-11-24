@@ -4,6 +4,15 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createCharacter } from './characters.js';
+import { createEnvironment } from './environment.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const COLS = 5;
 const ROWS = 4;
@@ -14,7 +23,7 @@ const ROBOT_HEIGHT = 2.1;
 const MODEL_URL = 'models/RobotExpressive.glb';
 const MODEL_TIMEOUT_MS = 10000;
 
-const BG = 0x070b12;
+const BG = 0x8eacbf;
 const STATE_COLOR = {
   healthy: 0x1fd18a,
   compromised: 0xff3048,
@@ -35,7 +44,7 @@ const FLOAT_COLOR = { blue: '#62b0ff', red: '#ff5468' };
 const FLOAT_CAUSE = { patch: 'patch', restore: 'restore', isolate_cost: 'isolated', first_breach: 'breach' };
 const FLOAT_MS = 1600;
 const FLOAT_MAX = 14; // live score-change sprites; the oldest is reused beyond this
-const LABEL_Y = 3.05;
+const LABEL_Y = 3.9;
 const LABEL_Z = -0.75;
 const LABEL_W = 4.3; // world width of the machine name label
 const LABEL_H = (LABEL_W * 112) / 440;
@@ -69,6 +78,13 @@ function nodeCenter(id) {
   const gx = ((id % COLS) + COLS) % COLS;
   const gy = Math.floor(id / COLS);
   return { x: (gx - (COLS - 1) / 2) * SPX, z: (gy - (ROWS - 1) / 2) * SPZ };
+}
+
+function combineBoxes(boxes) {
+  const parts = boxes.map(([w, h, d, x, y, z]) => new THREE.BoxGeometry(w, h, d).translate(x, y, z));
+  const merged = mergeGeometries(parts, false);
+  for (const part of parts) part.dispose();
+  return merged;
 }
 
 function slotPosition(nodeId, actorId, out) {
@@ -185,26 +201,28 @@ class NodeView {
     g.add(pad);
 
     this.rackMat = new THREE.MeshStandardMaterial({
-      color: 0x1b2636,
-      metalness: 0.55,
-      roughness: 0.42,
+      color: 0x28516d,
+      metalness: 0.25,
+      roughness: 0.55,
       emissive: STATE_COLOR.healthy,
       emissiveIntensity: 0.2,
     });
     const rack = (this.rack = new THREE.Mesh(shared.rackGeo, this.rackMat));
-    rack.position.set(0, PAD_Y + 0.9, -0.6);
+    rack.position.set(0, PAD_Y + 1.3, -0.6);
     rack.castShadow = true;
     rack.receiveShadow = true;
     rack.userData.nodeId = id;
     g.add(rack);
 
+    // Five recessed drive bays, metallic door rails and pull handles share just two meshes.
+    rack.add(new THREE.Mesh(shared.faceGeo, shared.faceMat));
+    rack.add(new THREE.Mesh(shared.trimGeo, shared.trimMat));
+
     // Glowing vent strips on the rack front and a rim on the pad.
     this.glowMat = new THREE.MeshBasicMaterial({ color: STATE_COLOR.healthy });
-    for (let i = 0; i < 5; i++) {
-      const strip = new THREE.Mesh(shared.stripGeo, this.glowMat);
-      strip.position.set(0, PAD_Y + 0.32 + i * 0.3, 0.06);
-      g.add(strip);
-    }
+    const strip = new THREE.Mesh(shared.stripClusterGeo, this.glowMat);
+    strip.position.copy(rack.position);
+    g.add(strip);
     const rim = new THREE.LineSegments(shared.rimGeo, new THREE.LineBasicMaterial({ color: STATE_COLOR.healthy }));
     rim.position.copy(pad.position);
     this.rimMat = rim.material;
@@ -218,16 +236,25 @@ class NodeView {
     g.add(this.ring);
     this.ring2 = new THREE.Mesh(shared.ringGeo, shared.ringMat);
     this.ring2.rotation.x = Math.PI / 2;
-    this.ring2.position.set(0, 2.25, -0.6);
+    this.ring2.position.set(0, 2.95, -0.6);
     this.ring2.scale.setScalar(0.5);
     this.ring2.visible = false;
     g.add(this.ring2);
 
     // Isolation cage.
     this.cage = new THREE.LineSegments(shared.cageGeo, shared.cageMat);
-    this.cage.position.set(0, PAD_Y + 1.05, -0.6);
+    this.cage.position.set(0, PAD_Y + 1.45, -0.6);
     this.cage.visible = false;
     g.add(this.cage);
+    this.shield = new THREE.Mesh(shared.shieldGeo, shared.shieldMat);
+    this.shield.position.copy(this.cage.position);
+    this.shield.visible = false;
+    g.add(this.shield);
+    this.scanSheet = new THREE.Mesh(shared.scanGeo, shared.scanMat);
+    this.scanSheet.rotation.x = -Math.PI / 2;
+    this.scanSheet.position.set(0, 0.4, -0.6);
+    this.scanSheet.visible = false;
+    g.add(this.scanSheet);
 
     // Breach shock ring.
     this.shockMat = new THREE.MeshBasicMaterial({
@@ -246,13 +273,13 @@ class NodeView {
     // Dark tray on the rack top, so the pips read against every rack colour (a red pip on a
     // breached, red rack would vanish otherwise).
     this.tray = new THREE.Mesh(shared.trayGeo, shared.trayMat);
-    this.tray.position.set(0, PAD_Y + 1.8 + 0.06, -0.42); // tall enough to clear the breach pulse
+    this.tray.position.set(0, PAD_Y + 2.6 + 0.06, -0.42);
     this.tray.visible = false;
     g.add(this.tray);
 
     // Card pips sit on top of the rack, toward the camera.
     this.pips = new THREE.Group();
-    this.pips.position.set(0, PAD_Y + 1.8 + 0.24, -0.25);
+    this.pips.position.set(0, PAD_Y + 2.6 + 0.24, -0.25);
     g.add(this.pips);
 
     this.label = makeTextSprite(440, 112, LABEL_W, true);
@@ -288,7 +315,7 @@ class NodeView {
     const col = hex(STATE_COLOR[state] || STATE_COLOR.healthy);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     roundRect(ctx, 6, 6, canvas.width - 12, canvas.height - 12, 20);
-    ctx.fillStyle = 'rgba(6, 10, 18, 0.86)';
+    ctx.fillStyle = '#17374b';
     ctx.fill();
     ctx.lineWidth = 6;
     ctx.strokeStyle = col;
@@ -371,10 +398,12 @@ class NodeView {
       this.glowMat.color.setHex(col);
       this.rimMat.color.setHex(col);
       this.cage.visible = state === 'isolated';
+      this.shield.visible = state === 'isolated';
     }
     this.monitored = !!n.monitored;
     this.ring.visible = this.monitored;
     this.ring2.visible = this.monitored;
+    this.scanSheet.visible = this.monitored;
     this.drawLabel(String(n.name ?? `MACHINE ${String(this.id + 1).padStart(2, '0')}`), n.value, state);
     this.setBreach(state === 'compromised' ? Math.round(Number(n.value) || 0) : 0);
     this.rebuildPips(Array.isArray(n.cards) ? n.cards : []);
@@ -382,16 +411,17 @@ class NodeView {
 
   update(now, t) {
     if (this.state === 'compromised') {
-      this.rackMat.emissiveIntensity = 0.7 + 0.35 * Math.sin(t * 6 + this.id);
+      this.rackMat.emissiveIntensity = 0.25 + 0.13 * Math.sin(t * 4 + this.id);
     } else if (this.state === 'isolated') {
       this.rackMat.emissiveIntensity = 0.16;
     } else {
-      this.rackMat.emissiveIntensity = 0.2;
+      this.rackMat.emissiveIntensity = 0.045;
     }
     if (this.monitored) {
       const s = 1 + 0.04 * Math.sin(t * 3 + this.id);
       this.ring.scale.setScalar(s);
       this.ring2.rotation.z = t * 1.5;
+      this.scanSheet.position.y = 0.25 + ((t * 0.7 + this.id * 0.13) % 1) * 2.5;
     }
     for (const pip of this.pulsePips) {
       pip.scale.setScalar(pip.userData.base * (1 + 0.13 * Math.sin(t * 3.2 + pip.userData.phase)));
@@ -464,12 +494,20 @@ class ActorView {
     }
 
     this.tag = makeTextSprite(384, 128, 3.3, false);
-    this.tag.sprite.position.set(0, ROBOT_HEIGHT + 0.85, 0);
+    this.tag.sprite.position.set(0, ROBOT_HEIGHT + 1.2, 0);
     this.tag.sprite.renderOrder = 20;
     this.group.add(this.tag.sprite);
   }
 
   buildRobot(template) {
+    if (template.procedural) {
+      this.character = createCharacter(this.id, this.tint);
+      this.character.root.scale.setScalar(1.3);
+      this.group.add(this.character.root);
+      this.materials.push(...this.character.materials);
+      this.character.root.traverse((o) => { if (o.isMesh) this.meshes.push(o); });
+      return;
+    }
     const obj = SkeletonUtils.clone(template.scene);
     obj.scale.setScalar(template.scale);
     obj.position.y = template.offsetY;
@@ -643,6 +681,7 @@ class ActorView {
     // An undetected red arrives fogged from the server (last-seen node, no action): draw it
     // faint with a "last seen" tag, so the humans see no more than the blue agents do.
     const unseen = this.team === 'red' && a.revealed === false;
+    this.currentAction = unseen ? '' : a.action;
     this.setFaint(unseen);
     this.drawTag(String(a.name ?? a.id), unseen ? 'LAST SEEN' : a.action);
   }
@@ -669,6 +708,7 @@ class ActorView {
     body.rotation.y = this.yaw;
 
     if (this.mixer) this.mixer.update(dt);
+    if (this.character) this.character.update(t, this.moving, this.currentAction, this.base, this.pulse);
     if (this.capsule) {
       const bob = this.moving ? Math.abs(Math.sin(t * 11)) * 0.12 : Math.sin(t * 2 + this.yaw) * 0.015;
       const p = (now - this.pulse) / 450;
@@ -688,6 +728,7 @@ class ActorView {
 function loadTemplate() {
   // ?nomodel=1 skips the GLB so the capsule fallback can be checked.
   if (new URLSearchParams(location.search).get('nomodel') === '1') return Promise.resolve(null);
+  if (new URLSearchParams(location.search).get('classicmodel') !== '1') return Promise.resolve({ procedural: true });
   return new Promise((resolve) => {
     let done = false;
     const finish = (v) => {
@@ -751,20 +792,29 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     if (onNote) onNote('3D view unavailable (WebGL could not start). The HUD still works.');
     return { ok: false, applyState() {}, setTickMs() {}, setDestination() {}, usingFallback: () => true };
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   renderer.setClearColor(BG, 1);
 
   const scene = new THREE.Scene();
+  const studio = new RoomEnvironment();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const environment = pmrem.fromScene(studio, 0.04).texture;
+  scene.environment = environment;
+  scene.environmentIntensity = 0.85;
+  studio.dispose(); pmrem.dispose();
   scene.background = new THREE.Color(BG);
-  scene.fog = new THREE.Fog(BG, 60, 150);
+  // A clean studio backdrop keeps every row and its status labels readable.
 
   // Fixed elevated three-quarter camera. Yaw 0 keeps "N" pointing up the
   // screen so the movement keys match what the players see. ?yaw=35 gives
   // a classic isometric angle for spectating.
   const params = new URLSearchParams(location.search);
   const yaw = THREE.MathUtils.degToRad(Number(params.get('yaw')) || 0);
-  const pitch = THREE.MathUtils.degToRad(Math.min(80, Math.max(25, Number(params.get('pitch')) || 46)));
+  const pitch = THREE.MathUtils.degToRad(Math.min(80, Math.max(25, Number(params.get('pitch')) || 36)));
   const camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.5, 400);
   const camDir = new THREE.Vector3(
     Math.sin(yaw) * Math.cos(pitch),
@@ -772,6 +822,10 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     Math.cos(yaw) * Math.cos(pitch),
   );
   const camTarget = new THREE.Vector3(0, 0.9, 0.9);
+  const composer = new EffectComposer(renderer);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.06, 0.25, 1.8);
+  const output = new OutputPass();
+  composer.addPass(new RenderPass(scene, camera)); composer.addPass(bloom); composer.addPass(output);
 
   // Points the view must contain: the grid footprint plus label height.
   const halfX = ((COLS - 1) / 2) * SPX + 2.3;
@@ -780,7 +834,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   const fitPoints = [];
   for (const x of [-halfX, halfX]) {
     for (const z of [zMin, zMax]) {
-      fitPoints.push(new THREE.Vector3(x, 0, z), new THREE.Vector3(x, 3.5, z));
+      fitPoints.push(new THREE.Vector3(x, 0, z), new THREE.Vector3(x, 4.45, z));
     }
   }
   const proj = new THREE.Vector3();
@@ -811,18 +865,19 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     const w = Math.max(1, container.clientWidth);
     const h = Math.max(1, container.clientHeight);
     renderer.setSize(w, h, false);
+    composer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     fitCamera();
   }
 
   // Lights.
-  scene.add(new THREE.HemisphereLight(0xbfd6ff, 0x0a0f18, 1.15));
-  const sun = new THREE.DirectionalLight(0xffffff, 2.3);
+  scene.add(new THREE.HemisphereLight(0xf1f8ff, 0x91a6b1, 1.5));
+  const sun = new THREE.DirectionalLight(0xfff4e6, 2.4);
   sun.position.set(-11, 26, 15);
   sun.target.position.set(0, 0, 0.5);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left = -19;
   sun.shadow.camera.right = 19;
   sun.shadow.camera.top = 17;
@@ -832,21 +887,28 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
-  const fill = new THREE.DirectionalLight(0x4f8cff, 0.55);
-  fill.position.set(14, 10, -12);
+  const fill = new THREE.DirectionalLight(0xc4e4ff, 1.4);
+  fill.position.set(8, 10, 22);
   scene.add(fill);
+  const edge = new THREE.DirectionalLight(0xa3eee1, 1.0);
+  edge.position.set(-15, 6, -16);
+  scene.add(edge);
 
   // Floor.
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(400, 400),
-    new THREE.MeshStandardMaterial({ color: 0x0c1320, roughness: 0.95, metalness: 0 }),
+    new THREE.MeshStandardMaterial({ color: 0x7594a6, roughness: 0.9, metalness: 0.05 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
-  const gridHelper = new THREE.GridHelper(400, 200, 0x16263c, 0x101b2c);
+  const gridHelper = new THREE.GridHelper(160, 80, 0x8ba9b8, 0x9bb6c4);
   gridHelper.position.y = 0.01;
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.18;
+  gridHelper.material.depthWrite = false;
   scene.add(gridHelper);
+  const ambience = createEnvironment(scene, nodeCenter);
 
   // Network links between neighbouring nodes.
   {
@@ -870,21 +932,34 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   }
 
   // Geometry and materials shared by all nodes.
-  const padGeo = new THREE.BoxGeometry(4.3, PAD_Y, 4.3);
+  const padGeo = new RoundedBoxGeometry(4.3, PAD_Y, 4.3, 2, 0.025);
   const shared = {
     padGeo,
-    padMat: new THREE.MeshStandardMaterial({ color: 0x121c2c, roughness: 0.8, metalness: 0.2 }),
+    padMat: new THREE.MeshStandardMaterial({ color: 0x4e7187, roughness: 0.75, metalness: 0.15 }),
     rimGeo: new THREE.EdgesGeometry(padGeo),
-    rackGeo: new THREE.BoxGeometry(2.3, 1.8, 1.3),
+    rackGeo: new RoundedBoxGeometry(3.0, 2.6, 1.7, 2, 0.12),
+    faceGeo: combineBoxes(Array.from({ length: 5 }, (_, i) => [2.5, 0.35, 0.05, 0, -0.9 + i * 0.43, 0.865])),
+    faceMat: new THREE.MeshStandardMaterial({ color: 0x153347, roughness: 0.65, metalness: 0.15 }),
+    trimGeo: combineBoxes([
+      [0.09, 2.33, 0.07, -1.33, 0, 0.875], [0.09, 2.33, 0.07, 1.33, 0, 0.875],
+      ...Array.from({ length: 5 }, (_, i) => [0.7, 0.035, 0.075, 0.12, -0.87 + i * 0.43, 0.925]),
+      ...Array.from({ length: 8 }, (_, i) => [0.045, 0.055, 0.6, -0.8 + i * 0.22, 1.32, -0.04]),
+    ]),
+    trimMat: new THREE.MeshStandardMaterial({ color: 0x9db8c7, metalness: 0.65, roughness: 0.35 }),
+    stripClusterGeo: combineBoxes(Array.from({ length: 5 }, (_, i) => [0.14, 0.065, 0.035, -1.0, -0.89 + i * 0.43, 0.915])),
+    shieldGeo: new THREE.BoxGeometry(3.45, 3.05, 2.15),
+    shieldMat: new THREE.MeshBasicMaterial({ color: STATE_COLOR.isolated, transparent: true, opacity: 0.075, depthWrite: false }),
+    scanGeo: new THREE.PlaneGeometry(2.25, 1.5),
+    scanMat: new THREE.MeshBasicMaterial({ color: 0x58dced, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
     stripGeo: new THREE.BoxGeometry(1.9, 0.07, 0.03),
     ringGeo: new THREE.TorusGeometry(2.25, 0.07, 8, 56),
     ringMat: new THREE.MeshBasicMaterial({ color: 0x37e0ff }),
-    cageGeo: new THREE.EdgesGeometry(new THREE.BoxGeometry(2.8, 2.25, 1.8)),
+    cageGeo: new THREE.EdgesGeometry(new THREE.BoxGeometry(3.45, 3.05, 2.15)),
     cageMat: new THREE.LineBasicMaterial({ color: STATE_COLOR.isolated }),
     shockGeo: new THREE.RingGeometry(0.85, 1.0, 48),
     pipGeo: new THREE.SphereGeometry(0.16, 14, 10),
     pipKevGeo: new THREE.OctahedronGeometry(0.22),
-    trayGeo: new THREE.BoxGeometry(2.3, 0.2, 0.95),
+    trayGeo: new THREE.BoxGeometry(2.95, 0.2, 1.2),
     trayMat: new THREE.MeshBasicMaterial({ color: 0x0a111c }),
     newGeo: new THREE.ConeGeometry(0.11, 0.24, 4),
     newMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
@@ -1116,6 +1191,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     if (!state) return;
     try {
       applyNodes(state, performance.now());
+      ambience.applyState(state);
       applyDeltas(state, performance.now());
       if (!assetsSettled) pendingState = state;
       else applyActors(state);
@@ -1132,11 +1208,12 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const t = (now - t0) / 1000;
+    ambience.update(t);
     shared.pipMat.patching.color.setHex(Math.sin(t * 9) > 0 ? PIP_COLOR.patching : 0x6b5200);
     for (const nv of nodes) nv.update(now, t);
     updateFloats(now);
     for (const av of actors.values()) av.update(now, dt, t);
-    renderer.render(scene, camera);
+    composer.render(dt);
   });
 
   const ro = new ResizeObserver(resize);
@@ -1218,6 +1295,9 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     // Frees what this module allocates on demand (score-change sprites, breach labels).
     dispose() {
       renderer.setAnimationLoop(null);
+      ambience.dispose();
+      environment.dispose();
+      bloom.dispose(); output.dispose(); composer.dispose();
       ro.disconnect();
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointerup', onPointerUp);

@@ -236,6 +236,7 @@ export function createRightPanel() {
 
   function agentCard(a) {
     const root = el('div', `agent agent-${a.team === 'red' ? 'red' : 'blue'}`);
+    root.dataset.actor = a.id;
     const chip = el('i', 'agent-chip');
     chip.style.background = CHIP[a.id] || (a.team === 'red' ? CHIP.red1 : CHIP.blue1);
     const head = el('div', 'agent-head');
@@ -264,6 +265,7 @@ export function createRightPanel() {
       setText(card.reason, stale ? `Last decision (tick ${r.tick}): ${plainReason(r.text)}` : `Why: ${plainReason(r.text)}`);
       card.reason.className = stale ? 'agent-reason is-muted' : 'agent-reason';
     }
+    card.reason.title = card.reason.textContent;
   }
 
   function renderAgents(state) {

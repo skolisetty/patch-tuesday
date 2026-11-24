@@ -10,6 +10,7 @@
     <div id="app">
       <header id="topbar">
         <div class="brand">
+          <div class="brand-eyebrow">CO-OP CYBER DEFENSE</div>
           <div class="logo">PATCH<span>TUESDAY</span></div>
           <div class="brand-sub">
             <span id="phase" class="phase phase-lobby">LOBBY</span>
@@ -20,13 +21,13 @@
 
         <section id="scoreboard" class="panel" aria-label="Scoreboard">
           <div class="score score-blue">
-            <label>BLUE · YOUR TEAM</label>
+            <label>DEFENDERS · BLUE</label>
             <output id="score-blue">0</output>
             <div id="rate-blue" class="rate">you + 3 AI defenders</div>
           </div>
           <div class="score-vs">vs</div>
           <div class="score score-red">
-            <label>RED · ATTACKERS</label>
+            <label>ATTACKERS · RED</label>
             <output id="score-red">0</output>
             <div id="rate-red" class="rate">2 hidden AI attackers</div>
           </div>
@@ -76,6 +77,7 @@
       </header>
 
       <main id="stage">
+        <div class="stage-heading"><span><i></i> NETWORK MAP</span><small>Click a server to move your operator</small></div>
         <canvas id="scene"></canvas>
         <div id="stage-legend" class="stage-legend">
           <div class="lg-row">
@@ -114,6 +116,7 @@
       </main>
 
       <aside id="ledger-panel" class="panel" aria-label="Agents and decision log">
+        <div class="squad-heading"><span>THE OPERATIVES</span><small>AUTONOMOUS / ACTIVE</small></div>
         <div class="panel-head">
           <div class="tabs" role="tablist">
             <button id="tab-agents" class="tab" type="button" role="tab" aria-selected="true">Agents</button>
@@ -158,7 +161,7 @@
     <div id="briefing" class="modal briefing" hidden role="dialog" aria-label="How to play">
       <div class="modal-card">
         <div class="modal-head">
-          <h2>HOW TO PLAY</h2>
+          <div><span class="modal-eyebrow">MISSION BRIEFING / PATCH TUESDAY</span><h2>Protect the network.</h2></div>
           <button id="brief-close" class="modal-x" type="button" title="Close (Esc). This does not affect the match.">Close ✕</button>
         </div>
         <p class="brief-goal">
@@ -166,6 +169,11 @@
           <b class="t-red">Red AI attackers</b> try to break into these 20 machines.
           After <span id="brief-length">5 minutes</span> the higher score wins.
         </p>
+        <div class="mission-steps">
+          <div><b>01</b><strong>Patch the weak spots.</strong><span>Fix high-risk cards before an attack.</span></div>
+          <div><b>02</b><strong>Recover what falls.</strong><span>Restore red servers to stop their income.</span></div>
+          <div><b>03</b><strong>Stay one step ahead.</strong><span>New weeks bring new vulnerabilities.</span></div>
+        </div>
         <div class="brief-cols">
           <section>
             <h3>How points move</h3>
@@ -176,7 +184,7 @@
               <tr class="r-blue"><td>Blue restores a breached machine</td><td>+3, and stops Red's income</td></tr>
             </table>
             <p class="brief-note">
-              Every card is a real CVE. <b>Danger</b> is its predicted chance of being exploited.
+              Live matches use real CVE records; demo mode uses sample cards. <b>Danger</b> is the card's risk score.
               Danger scores this week come from: <b id="brief-source" class="t-model">the EPSS baseline</b>.
             </p>
             <p class="brief-note">

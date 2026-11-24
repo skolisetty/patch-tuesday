@@ -121,7 +121,7 @@ export function createDebrief({ onStart, onChange }) {
     const blue = Number(sc.blue) || 0;
     const red = Number(sc.red) || 0;
     root.className = `modal debrief ${blue === red ? 'is-draw' : blue > red ? 'is-blue' : 'is-red'}`;
-    setText(title, blue === red ? 'DRAW' : blue > red ? 'BLUE HOLDS THE NETWORK' : 'RED WINS');
+    setText(title, blue === red ? 'A MATCH OF EQUALS' : blue > red ? 'DEFENDERS VICTORIOUS' : 'ATTACKERS VICTORIOUS');
     setText(
       sub,
       `Blue ${fmtScore(blue)} · Red ${fmtScore(red)} · ${plural(sc.breaches_total ?? 0, 'breach', 'breaches')}, ` +
