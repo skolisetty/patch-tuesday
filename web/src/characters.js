@@ -39,25 +39,81 @@ export function createCharacter(id, tint = 0x55e3db) {
     m.position.set(...pos); m.castShadow = true; parent.add(m); return m;
   }
   const body = new THREE.Group(); root.add(body);
+  const arms = [];
+  const legs = [];
+  let head, jaw;
+  if (human) {
+    // Players are people, not machines: soft cloth, skin, hair and a face. A hoodie in the
+    // player's colour keeps them easy to tell apart from each other and from the robots.
+    const second = id === 'p2';
+    const cloth = (color, rough = 0.85) => material(color, 0, rough);
+    const skin = cloth(second ? 0x9a6a48 : 0xf0c29e, 0.7);
+    const hair = cloth(second ? 0x1b1410 : 0x5a3620, 0.9);
+    const hoodie = cloth(tint);
+    const jeans = cloth(0x2f4a7d);
+    const white = cloth(0xf4f6f8, 0.6);
+    const dark = cloth(0x1d2433, 0.5);
+    const ball = (parent, radius, pos, mat, scale) => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 16), mat);
+      m.position.set(...pos); if (scale) m.scale.set(...scale); m.castShadow = true; parent.add(m); return m;
+    };
+    box(body, [0.56, 0.62, 0.32], [0, 1.14, 0], hoodie, 0.13);          // hoodie
+    box(body, [0.5, 0.2, 0.3], [0, 0.8, 0], jeans, 0.07);               // hips
+    box(body, [0.3, 0.15, 0.03], [0, 0.98, 0.165], dark, 0.012);        // front pocket
+    box(body, [0.02, 0.3, 0.02], [0, 1.25, 0.165], white, 0.006);       // zip
+    box(body, [0.42, 0.2, 0.2], [0, 1.43, -0.13], hoodie, 0.09);        // hood, down on the back
+    for (const x of [-0.05, 0.05]) box(body, [0.018, 0.16, 0.018], [x, 1.33, 0.17], white, 0.006);   // drawstrings
+    ball(body, 0.1, [0, 1.5, 0], skin, [1, 1.2, 1]);                    // neck
+    head = new THREE.Group(); head.position.y = 1.8; body.add(head);
+    ball(head, 0.25, [0, 0, 0], skin, [0.95, 1.06, 0.98]);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.262, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.52), hair);
+    cap.position.set(0, 0.03, -0.022); cap.rotation.x = -0.32; cap.castShadow = true; head.add(cap);
+    if (second) { ball(head, 0.12, [0, 0.25, -0.12], hair); box(head, [0.4, 0.3, 0.12], [0, -0.08, -0.2], hair, 0.055); }
+    else box(head, [0.3, 0.07, 0.1], [0.03, 0.2, 0.17], hair, 0.03);    // fringe
+    for (const x of [-0.088, 0.088]) {
+      ball(head, 0.04, [x, 0.02, 0.212], white, [1, 1, 0.5]);
+      ball(head, 0.022, [x, 0.02, 0.232], dark, [1, 1, 0.5]);
+      box(head, [0.085, 0.018, 0.02], [x, 0.085, 0.225], hair, 0.006);  // eyebrow
+      ball(head, 0.05, [x * 2.75, -0.01, 0], skin, [0.6, 1, 0.8]);      // ear
+    }
+    ball(head, 0.03, [0, -0.04, 0.245], skin);                          // nose
+    jaw = box(head, [0.1, 0.02, 0.02], [0, -0.115, 0.218], cloth(0xa8483f), 0.008);   // smile
+    // headset: these two are on comms with the agents
+    box(head, [0.56, 0.035, 0.05], [0, 0.262, 0], dark, 0.015).scale.set(0.5, 1, 1);
+    for (const x of [-0.25, 0.25]) box(head, [0.05, 0.14, 0.12], [x, 0, 0], dark, 0.02);
+    box(head, [0.02, 0.02, 0.2], [0.25, -0.08, 0.1], dark, 0.006).rotation.x = 0.35;
+    ball(head, 0.028, [0.25, -0.115, 0.2], light);
+    for (const side of [-1, 1]) {
+      box(head, [0.03, 0.27, 0.05], [side * 0.245, 0.13, 0], dark, 0.012);
+      const arm = new THREE.Group(); arm.position.set(side * 0.36, 1.38, 0); body.add(arm);
+      box(arm, [0.18, 0.5, 0.2], [0, -0.2, 0], hoodie, 0.08);
+      box(arm, [0.185, 0.05, 0.205], [0, -0.43, 0], white, 0.02);      // cuff
+      ball(arm, 0.078, [0, -0.52, 0], skin);
+      arms.push(arm);
+      const leg = new THREE.Group(); leg.position.set(side * 0.145, 0.76, 0); body.add(leg);
+      box(leg, [0.21, 0.6, 0.23], [0, -0.3, 0], jeans, 0.08);
+      box(leg, [0.22, 0.12, 0.38], [0, -0.69, 0.06], white, 0.05);      // trainers
+      box(leg, [0.225, 0.035, 0.385], [0, -0.74, 0.06], hoodie, 0.012); // coloured sole
+      legs.push(leg);
+    }
+  } else {
   const torso = box(body, [0.69, 0.73, 0.37], [0, 1.12, 0], armor, 0.09);
   box(body, [0.5, 0.18, 0.32], [0, 0.71, 0], black);
   box(body, [0.57, 0.07, 0.37], [0, 0.79, 0.015], steel, 0.02);
   box(body, [0.12, 0.09, 0.035], [0, 0.79, 0.21], accent, 0.01);
   const neck = sphere(body, 0.115, [0, 1.53, 0], black);
-  const head = new THREE.Group(); head.position.y = 1.78; body.add(head);
+  head = new THREE.Group(); head.position.y = 1.78; body.add(head);
   box(head, [0.43, 0.48, 0.37], [0, 0, 0], steel, 0.09);
   box(head, [0.45, 0.27, 0.12], [0, 0.07, 0.17], black, 0.055);
   for (const x of [-0.105, 0.105]) box(head, [0.115, 0.035, 0.035], [x, 0.09, 0.244], light, 0.012);
   box(head, [0.06, 0.085, 0.08], [0, -0.055, 0.21], steel, 0.015);
-  const jaw = box(head, [0.29, 0.08, 0.05], [0, -0.165, 0.185], black, 0.025);
+  jaw = box(head, [0.29, 0.08, 0.05], [0, -0.165, 0.185], black, 0.025);
   jaw.userData.articulated = true;
   for (let x = -2; x <= 2; x++) box(head, [0.024, 0.035, 0.025], [x * 0.045, -0.165, 0.218], steel, 0.005);
   for (const x of [-0.245, 0.245]) {
     sphere(head, 0.075, [x, 0.015, 0], black);
     sphere(head, 0.04, [x * 1.1, 0.015, 0], accent);
   }
-  const arms = [];
-  const legs = [];
   for (const side of [-1, 1]) {
     const arm = new THREE.Group(); arm.position.set(side * 0.44, 1.36, 0); body.add(arm);
     sphere(arm, 0.13, [0, 0, 0], black);
@@ -125,11 +181,8 @@ export function createCharacter(id, tint = 0x55e3db) {
       box(head, [0.55, 0.42, 0.4], [0, 0.08, -0.085], armor, 0.08);
       sphere(head, 0.075, [-0.11, 0.1, 0.27], light);
       box(body, [0.76, 0.22, 0.48], [0, 1.42, -0.04], black, 0.06);
-    } else if (human) {
-      // Players: clean command armour, twin chest lights and a coloured helmet crown.
-      box(head, [0.47, 0.11, 0.42], [0, 0.23, -0.01], accent, 0.045);
-      for (const x of [-0.16, 0.16]) box(body, [0.045, 0.32, 0.035], [x, 1.17, 0.27], light, 0.01);
     }
+  }
   }
 
   // Merge static plates per material within each joint. Detailed models stay inexpensive
