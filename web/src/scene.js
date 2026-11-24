@@ -82,13 +82,14 @@ const SLOT = {
 
 const HOP_HEIGHT = 0.7; // how high a character hops on each step between machines
 const JUMP_HEIGHT = 1.1;
+const STEP_HEIGHT = 1.5; // height of one terrace step between rows
 const JUMP_MS = 480;
 const LOOPING = new Set(['Idle', 'Walking', 'Running', 'Dance']);
 
 function nodeCenter(id) {
   const gx = ((id % COLS) + COLS) % COLS;
   const gy = Math.floor(id / COLS);
-  const y = 0;
+  const y = (ROWS - 1 - gy) * STEP_HEIGHT;   // terraces: every row behind the front one is a step up
   return { x: (gx - (COLS - 1) / 2) * SPX, y, z: (gy - (ROWS - 1) / 2) * SPZ };
 }
 
@@ -899,7 +900,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   // a classic isometric angle for spectating.
   const params = new URLSearchParams(location.search);
   const yaw = THREE.MathUtils.degToRad(Number(params.get('yaw')) || 0);
-  const pitch = THREE.MathUtils.degToRad(Math.min(80, Math.max(25, Number(params.get('pitch')) || 47)));
+  const pitch = THREE.MathUtils.degToRad(Math.min(80, Math.max(25, Number(params.get('pitch')) || 36)));
   const camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.5, 400);
   const camDir = new THREE.Vector3(
     Math.sin(yaw) * Math.cos(pitch),
@@ -920,6 +921,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   for (const x of [-halfX, halfX]) {
     for (const z of [zMin, zMax]) {
       fitPoints.push(new THREE.Vector3(x, 0, z), new THREE.Vector3(x, 4.45, z));
+      if (z === zMin) fitPoints.push(new THREE.Vector3(x, 4.45 + (ROWS - 1) * STEP_HEIGHT, z));   // the raised back row
     }
   }
   const proj = new THREE.Vector3();
@@ -1014,6 +1016,27 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
     scene.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x1f5f8f })));
+
+    // The terraces the rows stand on: one slab per raised row, with a lit front edge.
+    const slabMat = new THREE.MeshStandardMaterial({ color: 0x16242c, roughness: 0.7, metalness: 0.25 });
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x2c8fa8 });
+    const slabW = (COLS - 1) * SPX + 7.5;
+    for (let gy = 0; gy < ROWS - 1; gy++) {
+      const c = nodeCenter(gy * COLS);
+      const h = c.y;
+      // from this row's front edge back to the far side of the board, so no gap shows behind it
+      const zFront = c.z + 0.55 + SPZ / 2;
+      const zBack = nodeCenter(0).z - 4.2;
+      const depth = zFront - zBack;
+      const slabGeo = new THREE.BoxGeometry(slabW, h, depth);
+      const slab = new THREE.Mesh(slabGeo, slabMat);
+      slab.position.set(0, h / 2 - 0.01, (zFront + zBack) / 2);
+      slab.receiveShadow = true;
+      scene.add(slab);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(slabGeo), edgeMat);
+      edges.position.copy(slab.position);
+      scene.add(edges);
+    }
   }
 
   // Geometry and materials shared by all nodes.
