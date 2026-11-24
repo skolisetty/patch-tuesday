@@ -3,6 +3,10 @@
 // shown without the game server. All CVE ids, vendors and titles here are
 // invented placeholders, not real vulnerability data, and every number
 // (hits, counts, reveal dates) is made up.
+//
+// ?mock=1&backup=1 also plays "Call for backup": a Coach watches, names the team's weakness at a
+// checkpoint, asks in a (pretend) BAND room, and a specialist joins as the eighth actor "blue4".
+// Without backup=1 nothing of that exists: state.backup is null and there are seven actors.
 
 const COLS = 5;
 const ROWS = 4;
@@ -54,6 +58,15 @@ function mulberry32(seed) {
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// "Call for backup": the three weaknesses and the specialist that answers each.
+const SPECIALISTS = ['responder', 'hardener', 'sentinel'];
+const WEAKNESS_OF = { responder: 'slow_response', hardener: 'exposure', sentinel: 'blind_spots' };
+const WEAKNESS_TITLE = { slow_response: 'Slow response', exposure: 'Exposure', blind_spots: 'Blind spots' };
+const BACKUP_ROOM = 'Patch Tuesday - Blue team';
+const BACKUP_SPAWN_NODE = 19; // the specialist walks in from the last machine of the board
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const r1 = (v) => Number(v.toFixed(1));
 const pct = (v) => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
 const pts = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
@@ -63,7 +76,13 @@ function addDays(iso, days) {
   return d.toISOString().slice(0, 10);
 }
 
-export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 150, autostart = true, seed = 20260322 }) {
+// backup: null (feature off) or { role, reply, replyAfter }:
+//   role        force Coach's recommendation: 'responder' | 'hardener' | 'sentinel' (else worked out)
+//   reply       what the pretend human answers in BAND: 'yes' (default), 'no', a specialist's name,
+//               'none' (nobody answers: Coach brings its own pick), 'standdown' (nobody answers and
+//               Coach stands down), 'unavailable' (BAND cannot be reached at the checkpoint)
+//   replyAfter  ticks between the question and the answer
+export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 150, autostart = true, seed = 20260322, backup = null }) {
   const rng = mulberry32(seed);
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
   let cardSeq = 0;
@@ -97,6 +116,8 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
   let campaignLeft = 0;
 
   let st = null;
+  let bk = null; // state.backup, null when the feature is off
+  let bkx = null; // what the mock tracks to fill it
   // Filled while one tick is computed.
   let deltas = [];
   let feedback = [];
@@ -181,6 +202,245 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
     campaignAtTick = null;
     campaignLeft = 0;
     rerank();
+    newBackup();
+  }
+
+  // ------------------------------------------------------ call for backup
+
+  function newBackup() {
+    bk = null;
+    bkx = null;
+    if (!backup) return;
+    const wait = clamp(Math.round(ticksTotal * 0.1), 6, 15);
+    bk = {
+      status: 'watching',
+      checkpoint_tick: clamp(Math.round(ticksTotal * 0.27), 4, 40),
+      weakness: null,
+      players: [],
+      recommended: null,
+      options: [...SPECIALISTS],
+      asked_tick: null,
+      expires_tick: null,
+      chosen: null,
+      by: null,
+      joined_tick: null,
+      actor_id: null,
+      room: BACKUP_ROOM,
+      before: null,
+      after: null,
+    };
+    bkx = {
+      wait,
+      replyAfter: clamp(Number(backup.replyAfter) || Math.min(5, wait - 2), 1, wait),
+      red: [0], blue: [0], breaches: [0], // totals at the end of each tick
+      spans: [], // { node, start, end } : how long each breach lasted
+      redTicks: 0, redHidden: 0, spotted: 0, unwatchedBreaches: 0,
+      humans: { p1: { acts: 0, patches: 0, worth: 0, restores: 0 }, p2: { acts: 0, patches: 0, worth: 0, restores: 0 } },
+    };
+  }
+
+  // Called at the end of every tick: the numbers Coach quotes are counted, not made up on the spot.
+  function trackBackup() {
+    if (!bkx) return;
+    bkx.red[st.tick] = st.score.red;
+    bkx.blue[st.tick] = st.score.blue;
+    bkx.breaches[st.tick] = st.score.breaches_total;
+    for (const n of st.nodes) {
+      const bad = n.state === 'compromised' || (n.state === 'isolated' && n.wasBreached);
+      const open = bkx.spans.find((s) => s.node === n.id && s.end === null);
+      if (bad && !open) bkx.spans.push({ node: n.id, start: st.tick, end: null });
+      else if (!bad && open) open.end = st.tick;
+    }
+    for (const a of st.actors) {
+      if (a.team !== 'red') continue;
+      bkx.redTicks += 1;
+      if (!a.revealed) bkx.redHidden += 1;
+    }
+  }
+
+  // Before/after numbers for the ticks in (from, to].
+  function windowStats(from, to) {
+    const ticks = Math.max(1, to - from);
+    const spans = bkx.spans.filter((s) => s.start > from && s.start <= to);
+    const total = spans.reduce((sum, s) => sum + (Math.min(s.end ?? to, to) - s.start), 0);
+    return {
+      ticks: to - from,
+      red_per_tick: r1(((bkx.red[to] ?? 0) - (bkx.red[from] ?? 0)) / ticks),
+      blue_per_tick: r1(((bkx.blue[to] ?? 0) - (bkx.blue[from] ?? 0)) / ticks),
+      breaches: (bkx.breaches[to] ?? 0) - (bkx.breaches[from] ?? 0),
+      avg_breach_ticks: spans.length ? r1(total / spans.length) : null,
+    };
+  }
+
+  function analyse() {
+    const red = st.score.red;
+    const held = st.breakdown.red.held;
+    const lens = bkx.spans.map((s) => (s.end ?? st.tick) - s.start);
+    const breachedNow = st.nodes.filter((n) => n.state === 'compromised').length;
+    const breaches = st.score.breaches_total;
+    let risky = 0;
+    for (const n of st.nodes) {
+      if (n.value < 2) continue;
+      for (const c of n.cards) if (c.patch_state === 'unpatched' && c.score >= 0.3) risky += 1;
+    }
+    const hiddenShare = bkx.redTicks ? bkx.redHidden / bkx.redTicks : 0;
+    const scores = {
+      slow_response: (red > 0 ? held / red : 0) + breachedNow * 0.08,
+      exposure: Math.min(1, risky / 8),
+      blind_spots: hiddenShare * 0.7,
+    };
+    const evidence = {
+      slow_response: [
+        `Red earned ${pts(held)} of its ${pts(red)} points from machines left breached.`,
+        lens.length
+          ? `A breached machine stayed breached for ${r1(lens.reduce((a, b) => a + b, 0) / lens.length)} ticks on average (longest: ${Math.max(...lens)}).`
+          : 'No machine has been breached yet.',
+        `${breachedNow} ${breachedNow === 1 ? 'machine is' : 'machines are'} breached right now.`,
+      ],
+      exposure: [
+        `${risky} open ${risky === 1 ? 'card with danger of 30% or more sits' : 'cards with danger of 30% or more sit'} on machines of value 2 or 3.`,
+        `${st.score.breaches_in_top50} of ${breaches} ${breaches === 1 ? 'breach' : 'breaches'} came through top-50 priority cards.`,
+      ],
+      blind_spots: [
+        `The attackers were hidden for ${Math.round(hiddenShare * 100)}% of the match so far.`,
+        `${bkx.unwatchedBreaches} of ${breaches} ${breaches === 1 ? 'breach' : 'breaches'} hit machines nobody was monitoring.`,
+        `An attacker was spotted on a monitored machine ${bkx.spotted} ${bkx.spotted === 1 ? 'time' : 'times'}.`,
+      ],
+    };
+    let key = Object.keys(scores).reduce((a, b) => (scores[b] > scores[a] ? b : a));
+    if (SPECIALISTS.includes(backup.role)) key = WEAKNESS_OF[backup.role];
+    bk.weakness = { key, title: WEAKNESS_TITLE[key], evidence: evidence[key] };
+    bk.recommended = SPECIALISTS.find((r) => WEAKNESS_OF[r] === key);
+    bk.players = ['p1', 'p2'].map((id) => {
+      const h = bkx.humans[id];
+      const name = id === 'p1' ? 'Player 1' : 'Player 2';
+      if (!h.acts) return { id, line: `${name} has not acted yet.` };
+      return {
+        id,
+        line: `${name} patched ${h.patches} ${h.patches === 1 ? 'card' : 'cards'} worth ${pts(Number(h.worth.toFixed(2)))} and restored ${h.restores} ${h.restores === 1 ? 'machine' : 'machines'}.`,
+      };
+    });
+  }
+
+  // Coach's part of one tick: watch, analyse at the checkpoint, ask, then act on the answer.
+  function backupStep(events) {
+    if (!bk) return;
+    const t = st.tick;
+    if (bk.status === 'watching' && t >= bk.checkpoint_tick) {
+      if (backup.reply === 'unavailable') {
+        bk.status = 'unavailable';
+        return;
+      }
+      analyse();
+      bk.status = 'analysing';
+      events.push({ kind: 'coach', text: `Coach: the team's weakness is ${bk.weakness.title.toLowerCase()}. ${bk.weakness.evidence[0]}` });
+    } else if (bk.status === 'analysing') {
+      bk.status = 'asked';
+      bk.asked_tick = t;
+      bk.expires_tick = t + bkx.wait;
+      const others = bk.options.filter((o) => o !== bk.recommended).join(' or ');
+      events.push({ kind: 'coach', text: `Coach recommends calling in ${cap(bk.recommended)}. Reply in BAND: yes, or name another (${others}), or no.` });
+    } else if (bk.status === 'asked' && bk.chosen) {
+      // Approved last tick: the specialist steps onto the board now and acts from the next tick.
+      const role = bk.chosen;
+      st.actors.push({
+        id: 'blue4', name: cap(role), team: 'blue', kind: 'agent', role, node_id: BACKUP_SPAWN_NODE,
+        action: 'WAIT', target_node: null, revealed: true, busy_ticks: 0,
+        job: null, revealLeft: 0, scanned: new Set(), lastSeen: BACKUP_SPAWN_NODE,
+        reinforcement: true, joinedAt: t,
+      });
+      bk.status = 'joined';
+      bk.joined_tick = t;
+      bk.actor_id = 'blue4';
+      const how = bk.by && bk.by.startsWith('Coach') ? 'no reply in BAND, called in by Coach' : `approved by ${bk.by} via BAND`;
+      events.push({ kind: 'backup', text: `${cap(role)} joined the Blue team (${how}).` });
+    } else if (bk.status === 'asked') {
+      const reply = backup.reply || 'yes';
+      const silent = reply === 'none' || reply === 'standdown';
+      if (!silent && t >= bk.asked_tick + bkx.replyAfter) {
+        bk.by = 'Alex';
+        if (reply === 'no') {
+          bk.status = 'declined';
+          events.push({ kind: 'backup', text: 'Backup declined.' });
+        } else {
+          bk.chosen = SPECIALISTS.includes(reply) ? reply : bk.recommended;
+        }
+      } else if (t >= bk.expires_tick) {
+        bk.by = 'Coach (no reply)';
+        if (reply === 'standdown') {
+          bk.status = 'declined';
+          events.push({ kind: 'backup', text: 'Backup declined.' });
+        } else {
+          bk.chosen = bk.recommended;
+        }
+      }
+    }
+  }
+
+  // The specialist's move: one step per tick and the same actions as any blue agent.
+  // Returns the sentence for its ledger row.
+  function specialistTurn(a, node, { startJob, monitor, move }) {
+    const dist = (n) => Math.abs((n.id % COLS) - (a.node_id % COLS)) + Math.abs(Math.floor(n.id / COLS) - Math.floor(a.node_id / COLS));
+    const openCards = (n) => n.cards.filter((c) => c.patch_state === 'unpatched');
+    const exposed = st.nodes
+      .filter((n) => n.state === 'healthy' && openCards(n).length)
+      .sort((x, y) => y.value - x.value || dist(x) - dist(y));
+    const goTo = (n) => move(stepToward(a.node_id, n.id));
+
+    if (a.role !== 'hardener' && node.state === 'compromised') {
+      startJob('RESTORE', 3);
+      return `${node.name} is breached and worth ${node.value}: restoring it stops Red's income here.`;
+    }
+    if (a.role === 'responder') {
+      const bad = st.nodes.filter((n) => n.state === 'compromised').sort((x, y) => y.value - x.value || dist(x) - dist(y))[0];
+      if (bad) {
+        goTo(bad);
+        return `${bad.name} is breached and worth ${bad.value}: going there to restore it.`;
+      }
+      const post = exposed[0];
+      if (!post) return 'Nothing is breached and no card is open.';
+      if (post.id !== node.id) {
+        goTo(post);
+        return `Nothing is breached: waiting on ${post.name}, the highest-value machine with open cards.`;
+      }
+      if (!node.monitored) {
+        monitor();
+        return `Nothing is breached: monitoring ${node.name} until something is.`;
+      }
+      return `Nothing is breached: standing by on ${node.name}.`;
+    }
+    if (a.role === 'hardener') {
+      let best = null;
+      for (const n of st.nodes) {
+        if (n.state !== 'healthy') continue;
+        for (const c of openCards(n)) {
+          if (c.attempted) continue;
+          const w = (n.value * c.score * (c.in_kev ? 1.5 : 1)) / (1 + 0.25 * dist(n));
+          if (!best || w > best.w) best = { w, n, c };
+        }
+      }
+      if (!best) return 'No open card is worth patching any more.';
+      const worth = pts(Number((best.n.value * best.c.score).toFixed(2)));
+      if (best.n.id !== node.id) {
+        goTo(best.n);
+        return `Heading for ${best.c.cve_id} on ${best.n.name}: worth ${worth} (machine value ${best.n.value} x danger ${pct(best.c.score)}).`;
+      }
+      startJob('PATCH', 2, best.c);
+      return `Patching the open card worth the most: ${worth} (machine value ${node.value} x danger ${pct(best.c.score)}).`;
+    }
+    // Sentinel: keep the highest-value exposed machines monitored, in rotation.
+    const round = exposed.slice(0, 3);
+    const post = round.find((n) => !n.monitored) || round[0];
+    if (!post) return 'No machine with open cards is left to watch.';
+    if (post.id !== node.id) {
+      goTo(post);
+      return `${post.name} (value ${post.value}) is not monitored: going there.`;
+    }
+    if (!node.monitored) {
+      monitor();
+      return `Monitoring ${node.name} (value ${node.value}): halves the breach chance here and can reveal an attacker.`;
+    }
+    return `${node.name} is already monitored: holding position.`;
   }
 
   // Every score change goes through here, so score, breakdown and score_deltas always agree.
@@ -273,6 +533,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
       events.push({ kind: 'campaign', text: 'Red agents pivot onto this week\'s freshest high-danger cards.' });
     }
     if (campaignLeft > 0) campaignLeft -= 1;
+    backupStep(events);
 
     for (const a of st.actors) {
       const node = nodeById(a.node_id);
@@ -281,6 +542,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
       let outcome = 'waiting';
       let p = null;
       let roll = null;
+      let why = null; // a specialist's own sentence for this row
       a.target_node = null;
       if (a.revealLeft > 0 && --a.revealLeft === 0) a.revealed = false;
 
@@ -295,15 +557,18 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
           if (!c.attempted) {
             const gain = node.value * c.score;
             addScore('blue', gain, 'patch', node.id, a.id, c.cve_id);
+            if (bkx && bkx.humans[a.id]) bkx.humans[a.id].worth += gain;
             say(a, 'PATCH', 'patched', true, `Patched ${c.cve_id}: +${pts(gain)} (machine value ${node.value} x danger ${pct(c.score)}).`);
           } else {
             say(a, 'PATCH', 'patched', true, `Patched ${c.cve_id}: Red had already attacked it, so no points. It can no longer be used.`);
           }
+          if (bkx && bkx.humans[a.id]) bkx.humans[a.id].patches += 1;
           events.push({ kind: 'patched', text: `${a.name} patched ${c.cve_id} on ${node.name}.` });
         } else if (job.action === 'RESTORE') {
           if (node.state === 'compromised') {
             node.state = 'healthy';
             addScore('blue', 3, 'restore', node.id, a.id);
+            if (bkx && bkx.humans[a.id]) bkx.humans[a.id].restores += 1;
             events.push({ kind: 'restored', text: `${a.name} restored ${node.name}.` });
             say(a, 'RESTORE', 'restored', true, `Restored ${node.name}: +3, and Red stops earning ${node.value} per tick here.`);
             outcome = 'restored';
@@ -394,6 +659,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
             outcome = 'breach';
             card.fate = { fate: 'breached', by: a.name, tick: st.tick };
             st.score.breaches_total += 1;
+            if (bkx && !node.monitored) bkx.unwatchedBreaches += 1;
             if (card.priority_rank !== null && card.priority_rank <= 50) st.score.breaches_in_top50 += 1;
             if (!node.breachedOnce) {
               node.breachedOnce = true;
@@ -407,6 +673,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
             if (node.monitored && rng() < 0.8) {
               a.revealed = true;
               a.revealLeft = 3;
+              if (bkx) bkx.spotted += 1;
               events.push({ kind: 'intel', text: `${a.name} was spotted on monitored ${node.name}.` });
             }
           }
@@ -434,6 +701,10 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
             move(to);
           }
         }
+      } else if (a.reinforcement) {
+        // It steps onto the board on the tick it joins and acts from the next one.
+        if (a.joinedAt === st.tick) why = 'Just joined the Blue team: getting its bearings.';
+        else why = specialistTurn(a, node, { startJob, monitor, move });
       } else if (a.kind === 'agent') {
         const best = sortedCards(node).find((c) => c.patch_state === 'unpatched');
         const r = rng();
@@ -455,6 +726,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
         const no = a.id === 'p1' ? 1 : 2;
         const act = pendingActs[no];
         pendingActs[no] = null;
+        if (act && bkx) bkx.humans[a.id].acts += 1;
         if (act) {
           if (act.action === 'MOVE') {
             const delta = { N: -COLS, S: COLS, W: -1, E: 1 }[act.dir];
@@ -492,7 +764,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
 
       ledgerSeq += 1;
       const ledger_id = `${st.match_id}-${st.tick}-${a.id}-${ledgerSeq}`;
-      const reason = (REASONS[action] || REASONS.WAIT)(card || { score: 0 });
+      const reason = why || (REASONS[action] || REASONS.WAIT)(card || { score: 0 });
       const hiddenRed = a.team === 'red' && !a.revealed;
       const late = a.kind === 'agent' && action !== 'WAIT' && !hiddenRed && rng() < 0.6;
       if (late) lateReasons.push({ ledger_id, reason_text: reason });
@@ -515,7 +787,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
         p_breach: p,
         roll,
         outcome,
-        policy: a.kind === 'human' ? 'human' : 'rule',
+        policy: a.kind === 'human' ? 'human' : a.reinforcement ? a.role : 'rule',
         reason_text: late ? null : a.kind === 'human' ? 'Player input.' : reason,
         llm_model: late ? 'mock-llm' : null,
         llm_latency_ms: late ? 800 : null,
@@ -533,8 +805,12 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
       if (n.state === 'isolated') addScore('blue', -1, 'isolate_cost', n.id);
     }
 
+    trackBackup();
+    if (bk && bk.status === 'joined' && !bk.before) bk.before = windowStats(0, bk.joined_tick);
+
     if (st.tick >= st.ticks_total) {
       st.phase = 'ended';
+      if (bk && bk.status === 'joined') bk.after = windowStats(bk.joined_tick, st.tick);
       st.reveal = buildReveal();
       for (const a of st.actors) a.revealed = true;
       events.push({ kind: 'info', text: 'Match over.' });
@@ -690,7 +966,11 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
       // With fog, an unrevealed attacker shows only where it was last seen, doing nothing.
       actors: st.actors.map((a) => (fog && a.team === 'red' && !a.revealed
         ? { id: a.id, name: a.name, team: a.team, kind: a.kind, role: a.role, node_id: a.lastSeen, action: 'WAIT', target_node: null, revealed: false, busy_ticks: 0 }
-        : { id: a.id, name: a.name, team: a.team, kind: a.kind, role: a.role, node_id: a.node_id, action: a.action, target_node: a.target_node, revealed: a.revealed, busy_ticks: a.busy_ticks })),
+        : {
+          id: a.id, name: a.name, team: a.team, kind: a.kind, role: a.role, node_id: a.node_id, action: a.action,
+          target_node: a.target_node, revealed: a.revealed, busy_ticks: a.busy_ticks,
+          ...(a.reinforcement ? { reinforcement: true } : {}),
+        })),
       score: {
         red: Number(st.score.red.toFixed(2)),
         blue: Number(st.score.blue.toFixed(2)),
@@ -705,6 +985,7 @@ export function createMock({ onMessage, onStatus, tickMs = 2000, ticksTotal = 15
       score_deltas: deltas,
       player_feedback: feedback,
       reveal: st.phase === 'ended' ? st.reveal : null,
+      backup: bk,
       ledger: rows,
       events,
     };

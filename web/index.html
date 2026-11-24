@@ -15,6 +15,7 @@
           <div class="brand-sub">
             <span id="phase" class="phase phase-lobby">LOBBY</span>
             <button id="btn-help" class="help-btn" type="button" title="How to play: goal, scoring and keys">? How to play</button>
+            <button id="btn-voice" class="help-btn voice-btn" type="button" aria-pressed="false" title="Agents say their moves out loud, each with its own voice (uses your browser's speech)">Voices: off</button>
             <span id="conn" class="conn conn-down"><i></i><b id="conn-text">CONNECTING</b></span>
           </div>
         </div>
@@ -117,6 +118,7 @@
 
       <aside id="ledger-panel" class="panel" aria-label="Agents and decision log">
         <div class="squad-heading"><span>THE OPERATIVES</span><small>AUTONOMOUS / ACTIVE</small></div>
+        <div id="coach" class="coach" hidden aria-label="Coach: call for backup"></div>
         <div class="panel-head">
           <div class="tabs" role="tablist">
             <button id="tab-agents" class="tab" type="button" role="tab" aria-selected="true">Agents</button>
@@ -191,6 +193,10 @@
               <b>The gate</b>: each week the pipeline tests our model against the EPSS baseline on bugs
               that really became exploited. Only a strict win lets our model set the danger; a tie keeps
               the EPSS baseline.
+            </p>
+            <p id="brief-backup" class="brief-note" hidden>
+              <b class="t-backup">Call for backup</b>: a Coach agent watches the team and can call in a
+              specialist through BAND.
             </p>
             <p class="brief-note">
               <b class="t-model">Advance week</b>: replays the next real week of vulnerability data through

@@ -9,7 +9,7 @@ from typing import Any
 
 from . import policy, rules
 from .rules import Action, breach_probability
-from .state import RED_IDS, Card, MatchState, card_from_serving, dist
+from .state import RED_IDS, Card, MatchState, card_from_serving, dist, take_events
 
 
 @dataclass
@@ -156,7 +156,9 @@ def run_tick(state: MatchState, human_actions: dict[str, Action] | None, rng: ra
     """Apply a pending world change, let every agent choose, resolve the tick, update memories."""
     if state.phase != "running":
         return TickResult(rows=[], events=[])
-    events: list[dict] = []
+    # "coach"/"backup" events the backup flow queued since the last tick and the server did not
+    # take itself (state.take_events); empty while the feature is off.
+    events: list[dict] = take_events(state)
     campaign = False
     if new_world is not None and state.tick < state.ticks_total - state.tuning.world_change_cutoff:
         events.extend(apply_world_change(state, new_world, rng))

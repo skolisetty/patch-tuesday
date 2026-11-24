@@ -6,19 +6,21 @@
 //   rightpanel.js  Agents tab and Full log tab
 //   pipeline.js    the pipeline strip shown during "Advance week"
 //   overlays.js    briefing card and end-of-match debrief
+//   coach.js       the Coach box of "Call for backup" (state.backup)
 //   wording.js     plain-language sentences shared by the above
 
 import { $, el, fmtDuration, fmtScore, fmtTime, onClick, setText } from './dom.js';
 import { cardKey, patchChoice } from './advisor.js';
-import { GATE_HELP, dataLine, feedLine, gateSentence, rates } from './wording.js';
+import { GATE_HELP, dataLine, feedLine, gateSentence, isBackup, rates } from './wording.js';
 import { createPlayerPanels } from './players.js';
 import { createRightPanel } from './rightpanel.js';
 import { createPipelineStrip } from './pipeline.js';
 import { createBriefing, createDebrief } from './overlays.js';
+import { createCoach } from './coach.js';
 
 const TICKER_CAP = 40;
-const TICKER_KINDS = new Set(['drop', 'campaign', 'gate', 'breach', 'patched', 'restored', 'intel', 'info']);
-const LOUD_KINDS = new Set(['drop', 'campaign', 'gate', 'breach']);
+const TICKER_KINDS = new Set(['drop', 'campaign', 'gate', 'breach', 'patched', 'restored', 'intel', 'info', 'coach', 'backup']);
+const LOUD_KINDS = new Set(['drop', 'campaign', 'gate', 'breach', 'coach', 'backup']);
 const BANNER_MS = 8000;
 // Tick length for the time-left clock: the contract's 2 s until main.js reports the server's
 // own value (/api/status tick_seconds, then the measured gap between state messages).
@@ -65,6 +67,7 @@ export function createHud({ onControl }) {
   const players = createPlayerPanels({ p1: $('hint-p1'), p2: $('hint-p2') });
   const right = createRightPanel();
   const pipeline = createPipelineStrip();
+  const coach = createCoach();
   const briefing = createBriefing({ onStart: () => onControl('start'), onChange: () => renderStageMsg() });
   const debrief = createDebrief({ onStart: () => onControl('start'), onChange: () => renderStageMsg() });
 
@@ -142,7 +145,7 @@ export function createHud({ onControl }) {
       const kind = String(ev.kind || 'info');
       const text = String(ev.text ?? '');
       if (kind === 'campaign') showFlash(text);
-      else if (kind === 'drop') showBanner(kind, text);
+      else if (kind === 'drop' || kind === 'backup') showBanner(kind, text);
       else if (kind === 'gate' && !pipeline.showVerdict(text)) showBanner(kind, text);
       if (!TICKER_KINDS.has(kind)) continue;
       const item = el('div', `tk tk-${kind}`);
@@ -278,6 +281,12 @@ export function createHud({ onControl }) {
     setText(dom.btnAdvance, advancing ? 'Advancing…' : 'Advance week');
 
     right.applyState(state);
+    coach.applyState(state);
+    // Compact agent cards while the Coach box is open or the specialist adds a sixth card, so
+    // every agent still fits in the panel. Never set when the feature is off.
+    const panel = $('ledger-panel');
+    panel.classList.toggle('is-crowded', coach.isFull() || (state.actors || []).some(isBackup));
+    panel.classList.toggle('is-coach-open', coach.isOpen());
     addPlayerFeedback(state);
     players.renderAll(state, ctx);
     addEvents(state);

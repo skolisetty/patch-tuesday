@@ -8,14 +8,14 @@ These are the fixed interfaces between the three parts of the project. Each part
 | Game server (FastAPI) | `game/` | Windows Python 3.12, venv at `.venv/` |
 | Web client (Vite + three.js) | `web/` | Windows Node 24 |
 
-The repo root is `C:\Users\kolis\Documents\Hackathon\patch-tuesday`, seen from WSL as `/mnt/c/Users/kolis/Documents/Hackathon/patch-tuesday`.
+The repo root is `<repo>`, seen from WSL as `/mnt/c/<path-to>/patch-tuesday`.
 
 ## Runtime rules
 
-- The pipeline database is `/home/kolis/.patch-tuesday/world.duckdb` inside WSL. Only `bruin` opens it, one run at a time.
+- The pipeline database is `/home/<you>/.patch-tuesday/world.duckdb` inside WSL. Only `bruin` opens it, one run at a time.
 - The game never opens the pipeline database. It reads `serving/*.json` and writes `data/game.duckdb`, `ledger/ledger.jsonl` and `ledger/reasons.jsonl`.
 - `bruin` is always run from the repo root, with `--workers 1`.
-- From Windows, call Bruin as `wsl -e bash -lc "cd /mnt/c/Users/kolis/Documents/Hackathon/patch-tuesday && export PATH=$HOME/.local/bin:$PATH && bruin ..."`.
+- From Windows, call Bruin as `wsl -e bash -lc "cd /mnt/c/<path-to>/patch-tuesday && export PATH=$HOME/.local/bin:$PATH && bruin ..."`.
 - Secrets live in `.env` at the repo root (git-ignored). Load them with code. Never print, log or echo a secret value.
 - All attacks are abstract game moves. No exploit code, no payloads, no reference URLs, no CVE description text in any served file.
 
@@ -27,6 +27,7 @@ The repo root is `C:\Users\kolis\Documents\Hackathon\patch-tuesday`, seen from W
 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | game | OpenAI-compatible endpoint for one-sentence reasons. If `LLM_API_KEY` is empty, use template reasons |
 | `BAND_API_KEY` | game | BAND agent key. Integration is off unless `BAND_ENABLED=1` |
 | `TELEM_API_KEY` | game | Telem key. Integration is off unless `TELEM_ENABLED=1` |
+| `BAND_KEY_*`, `BAND_ID_*`, `BAND_BLUE_CHAT_ID`, `BAND_BACKUP*`, `BAND_TEAM_*` | game | "Call for backup": see that section for the full list |
 
 ## Serving files (pipeline writes, game reads)
 
@@ -119,7 +120,7 @@ Server to client, once per tick (tick = 2.0 s, match = 150 ticks) and once on co
 ```
 
 - The grid is 5 columns by 4 rows; `id = y * 5 + x`.
-- Actor ids: `red1`, `red2`, `blue1`, `blue2`, `blue3`, `p1`, `p2`.
+- Actor ids: `red1`, `red2`, `blue1`, `blue2`, `blue3`, `p1`, `p2`. With "Call for backup" an eighth, `blue4`, can join during a match (see that section).
 - `ledger` holds only the rows created this tick. Row fields: `ledger_id, match_id, world_asof, pipeline_run_id, model_version, tick, ts, actor_id, team, kind, action, node_id, cve_id, score_used, score_source, p_breach, roll, outcome, policy, reason_text, llm_model, llm_latency_ms`.
 
 Server to client, when a late LLM reason arrives:
@@ -328,6 +329,117 @@ None of the new fields shows more of a hidden attacker than the message did befo
 - `reveal` is never sent while a match runs.
 - `world.advance` holds pipeline progress only.
 
+## Call for backup (BAND)
+
+One use of BAND: a Coach agent analyses the Blue team during a match, says in a BAND room what the team is weakest at, and, when a human in the room agrees, calls in one specialist agent that joins the room and walks onto the board as an eighth actor. `docs/BAND.md` is the guide; this section is the contract.
+
+Code: `game/backup.py` decides everything (analysis, the three specialist policies, the flow; no network). `game/bandteam.py` only carries the flow's lines to BAND and the humans' replies back. `scripts/band_setup.py` registers the agents and the room once.
+
+### When it is on
+
+The feature is on for a match when all of these hold at match start; otherwise the server behaves exactly as before (seven actors, the same random stream, no `backup` key in the state message):
+
+- `BAND_ENABLED=1` (`scripts\start.ps1 -Band` sets it) and `BAND_BACKUP` is not `0`
+- `BAND_KEY_COACH`, `BAND_KEY_TRIAGE`, `BAND_KEY_PATCHER`, `BAND_KEY_HUNTER`, `BAND_KEY_RESPONDER`, `BAND_KEY_HARDENER`, `BAND_KEY_SENTINEL` and `BAND_BLUE_CHAT_ID` are set
+- the BAND side has not switched itself off in this server process (see "Limits")
+
+### Wire additions (server to client)
+
+`state.backup` is absent (read it as null) while the feature is off, in the lobby and after a reset. Otherwise:
+
+```json
+"backup": {
+  "status": "watching|analysing|asked|joined|declined|unavailable",
+  "checkpoint_tick": 40,
+  "weakness": null,
+  "players": [],
+  "recommended": null, "options": ["responder","hardener","sentinel"],
+  "asked_tick": null, "expires_tick": null,
+  "chosen": null, "by": null,
+  "joined_tick": null, "actor_id": null,
+  "room": "Patch Tuesday - Blue team",
+  "before": null, "after": null,
+  "team_ok": null, "reason": null
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `status` | `watching` (before the checkpoint), `analysing` (Coach and the three blue agents are speaking), `asked` (Coach waits for a reply), `joined`, `declined`, `unavailable` (BAND went away or the flow failed; nothing more is asked this match) |
+| `checkpoint_tick` | The tick the analysis is planned for; once it has run, the tick it ran at |
+| `weakness` | null before the analysis, then `{"key":"slow_response|exposure|blind_spots","title":"Slow response","evidence":["Red earned 31 of its 46 points from machines left breached.","..."]}` |
+| `players` | `[{"id":"p1","line":"Player 1 patched 4 cards worth 1.9 and restored nothing."}]`, one entry per human player, empty before the analysis |
+| `recommended`, `options` | Coach's pick and the three specialists a human may name |
+| `asked_tick`, `expires_tick` | When Coach asked and the tick the answer window closes |
+| `chosen`, `by` | The specialist that joined, and who decided: the human's BAND display name, or `"Coach (no reply)"` |
+| `joined_tick`, `actor_id` | The tick the specialist joined and its actor id, always `"blue4"` |
+| `room` | The BAND room's title |
+| `before`, `after` | `{"ticks","red_per_tick","blue_per_tick","breaches","avg_breach_ticks","peak_breached"}` for the ticks before the join and since it. `before` is set at the join, `after` when the match ends (it stays in `GET /api/state`). `avg_breach_ticks` is null when no machine was breached in that window |
+| `team_ok` | true when Blue was ahead and no weakness stood out (Coach still offers the specialist that helps most) |
+| `reason` | Why the status is `unavailable`, else null. Never holds a key |
+
+After the join, `state.actors` has an eighth entry, last in the list: `{"id":"blue4","name":"Responder","team":"blue","kind":"agent","role":"responder","reinforcement":true, ...}`. The `reinforcement` key exists only on that entry. It starts at JUMP-01 (machine 19) and obeys the same rules, durations and scoring as any blue agent. Its ledger rows are normal rows (`actor_id` `blue4`, `kind` `agent`, `team` `blue`, `policy` = its role).
+
+Two new `events[].kind` values: `coach` (the analysis in one sentence, then the recommendation) and `backup` (`Responder joined the Blue team (approved by Suman via BAND).`, `Backup declined.`). Neither goes to the highlights room of the BAND event mirror.
+
+### Flow
+
+1. Checkpoint, once per match: tick `BAND_BACKUP_TICK` (default 40); earlier when Red leads by 15 or more after tick 20; or when a human asks Coach in the room (not before tick 10, not in the last 30 ticks).
+2. Coach posts the analysis and mentions Triage, Patcher and Hunter. Each of them posts one line with its own numbers, 3 seconds apart.
+3. Coach posts its recommendation and mentions the humans in the room (at most three).
+4. Answer window: `BAND_BACKUP_WAIT_TICKS` ticks (default 15). The first accepted human message decides. With no reply Coach calls in its own pick, or stands down when `BAND_BACKUP_AUTO=0`.
+5. On a yes, Coach adds the specialist's agent to the room, the specialist introduces itself, and it is on the board from that tick. While it plays it reports at most once per 15 seconds.
+6. At match end Coach posts the before/after summary. At the next match start, and on reset, Coach removes the specialist from the room (`DELETE /agent/chats/{chat}/participants/{id}`).
+
+### The words Coach understands
+
+A message counts only when a human (BAND `sender_type` `"User"`) wrote it in the room, it mentions Coach, it is younger than 60 seconds and it was written after the current match started. Its text is cut to 200 characters, mention tokens are removed, and it is matched against fixed words only (case does not matter). It is never sent to an LLM or a shell.
+
+| When | Words | Effect |
+|---|---|---|
+| Before the analysis | `analyze`, `analyse`, `backup`, `help` | Coach runs the analysis now (from tick 10 on) |
+| While Coach waits for a reply | `responder`, `hardener`, `sentinel` | That specialist joins. A name wins over every other word |
+| While Coach waits for a reply | `yes`, `ok`, `go`, `do it` | Coach's recommended specialist joins |
+| While Coach waits for a reply | `no`, `none` | No backup this match |
+
+Anything else is acknowledged in BAND and ignored by the game.
+
+### Environment variables
+
+| Name | Used by | Meaning |
+|---|---|---|
+| `BAND_USER_API_KEY` | `band_setup.py` only | Your BAND user key (`band_u_...`), needed once to register the agents. The game server never reads it |
+| `BAND_BACKUP` | game | `0` switches the feature off while the event mirror stays on |
+| `BAND_KEY_<NAME>` | game, setup | Agent key of `COACH`, `TRIAGE`, `PATCHER`, `HUNTER`, `RESPONDER`, `HARDENER`, `SENTINEL`. Written by the setup script |
+| `BAND_ID_<NAME>` | game, setup | The same agents' ids (not secret). When one is missing the server asks BAND once with that agent's key |
+| `BAND_BLUE_CHAT_ID` | game, setup | The room "Patch Tuesday - Blue team" |
+| `BAND_BACKUP_TICK` | game | Checkpoint tick, default 40 |
+| `BAND_BACKUP_WAIT_TICKS` | game | Answer window in ticks, default 15 |
+| `BAND_BACKUP_AUTO` | game | `0` = with no reply Coach stands down; default: Coach calls in its own pick |
+| `BAND_TEAM_MIN_INTERVAL` | game | Seconds between two posts in the room, default 3 |
+| `BAND_TEAM_POLL_SECONDS` | game | Seconds between two reads of Coach's inbox, default and minimum 2.5 |
+| `BAND_TEAM_MAX_PER_HOUR`, `BAND_TEAM_MAX_POSTS` | game | Budget: room posts per rolling hour (default 200; more are dropped) and per server process (default 1000; then the feature switches itself off) |
+| `BAND_TRUSTED_SENDER_IDS` | game | Test only, empty by default: comma-separated BAND ids whose messages count like a human's |
+| `BAND_BASE_URL` | game, setup | Test only: another BAND API base URL. The setup script refuses plain http except for localhost |
+| `PT_BACKUP_OFFLINE` | game | Rehearsal only: `1` runs the flow with no BAND at all. Nobody can reply, so Coach decides when the window closes |
+
+### What the server sends to BAND, and the limits it keeps
+
+- Each line is one chat message from the speaker's own agent key (`POST /agent/chats/{chat}/messages`), with mention objects `{"id","handle","name"}` read from the room's participant list. A whole match posts about 8 to 16 messages.
+- One poller, with Coach's key only, reads Coach's inbox (`GET /agent/chats/{chat}/messages?limit=100`), and only while a match with the feature runs. Every row it gets is acknowledged with `/processing` and then `/processed`; `/failed` is never called. A row whose claim BAND refuses (204) is left for the next read. Rows from other agents are acknowledged and never acted on. Each message id is acted on at most once.
+- HTTP 429: wait `Retry-After`, else 1, 2, 4, 8, 16 seconds. HTTP 503: retry after a short wait.
+- HTTP 403 `limit_reached`: the feature is off until the server restarts, and `/api/status` names the limit. HTTP 403 "execution is stopped" or HTTP 401: that agent stops posting; when it is Coach, the feature is off. Five failed requests in a row: off.
+- When the BAND side goes off during a match, `backup.status` becomes `unavailable` and the match goes on. A specialist that had already joined keeps playing.
+- All BAND traffic runs in background tasks with a 5 second timeout. The tick loop only puts lines in a queue and takes replies out of one.
+
+### `scripts/band_setup.py`
+
+`python scripts/band_setup.py [--env PATH] [--suffix TEXT] [--dry-run]`. Standard library only. It reads `BAND_USER_API_KEY` from the env file (default `.env`), registers the seven agents that are missing, creates the room with Coach's key when `BAND_BLUE_CHAT_ID` is empty or unreadable, adds Triage, Patcher, Hunter and the owner as members (never the specialists), and posts one hello line from Coach when it created the room or added a member. It writes only `BAND_*` lines of the env file and prints names, ids and handles, never a key. A second run reads only. If an agent of a wanted name exists but the env file has no working key for it, the script stops before changing anything (exit code 3) and deletes nothing: regenerate that key in the BAND web app, or pass `--suffix` to register a separate set. `--dry-run` makes no POST and writes nothing. Exit codes: 0 done, 2 configuration problem, 3 stopped on an existing agent, 4 BAND refused or could not be reached.
+
+### Fog of war
+
+The analysis reads blue rows, the board, the score and the match history of breaches, restores and detections, all of which the defenders could see when they happened. Nothing about an unrevealed attacker reaches the BAND room, `state.backup` or the specialist's policy.
+
 ## Details that hold in code (not stated above)
 
 ### Fog of war in the state message
@@ -338,7 +450,7 @@ While `phase` is `"running"`, a red actor that is not revealed is sent as: `node
 
 | Route | Detail |
 |---|---|
-| `GET /api/status` | Which optional parts are live, no secrets: `phase`, `tick`, `tick_seconds`, `data_source` (`serving` or `serving_mock`), `asof_date`, `advancing`, `last_advance`, `llm` (`enabled`, `model`, `scheduled`, `ok`, `failed`, `dropped`), `band` (`enabled_flag`, `active`, `disabled_reason`, `chat_resolved`, `queued` and its counters), `telem` (`enabled`, `searches`), `clients` |
+| `GET /api/status` | Which optional parts are live, no secrets: `phase`, `tick`, `tick_seconds`, `data_source` (`serving` or `serving_mock`), `asof_date`, `advancing`, `last_advance`, `llm` (`enabled`, `model`, `scheduled`, `ok`, `failed`, `dropped`), `band` (`enabled_flag`, `active`, `disabled_reason`, `chat_resolved`, `queued` and its counters), `band_team` ("Call for backup": `feature`, `enabled_flag`, `active`, `disabled_reason`, `room_resolved`, `listening`, `queued`, `posts`, `polls`, `errors`, `accepted`, `stopped_agents`, `specialists_in_room`, `counters`, `flow` = the flow's status in this match or null, `offline`), `telem` (`enabled`, `searches`), `clients` |
 | `GET /api/world` | Also `data_source`, `last_advance` (the last result object of `advance.py`, or null) and `advance` |
 | `GET /api/ledger?limit=` | `limit` 1..5000, default 200 |
 | `POST /api/match/start?seed=` | `seed` optional. 200 with `{"ok":true,"match_id","seed","phase":"running"}`; 409 when a match is already running |

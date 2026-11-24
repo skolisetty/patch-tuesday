@@ -3,7 +3,7 @@
 # 2026-03-22 through scripts/advance.py --day0 (which takes data/.advance.lock).
 # Run inside WSL from anywhere:   bash scripts/reset.sh            (refuses while an advance runs)
 #                                 bash scripts/reset.sh --force    (also removes a stale lock)
-# From Windows:  wsl -e bash -lc "cd /mnt/c/Users/kolis/Documents/Hackathon/patch-tuesday && bash scripts/reset.sh"
+# From Windows:  wsl -e bash -lc "cd /mnt/c/<path-to>/patch-tuesday && bash scripts/reset.sh"
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

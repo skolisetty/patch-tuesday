@@ -2,13 +2,20 @@
 // feed of the latest breaches, patches and restores. Tab "Full log": the decision ledger.
 
 import { $, el, fmtPct, isNum, onClick, plural, setText } from './dom.js';
-import { actionPhrase, feedLine, plainReason, roleText, traceSentence } from './wording.js';
+import { actionPhrase, feedLine, isBackup, plainReason, roleText, traceSentence } from './wording.js';
 
 const LEDGER_CAP = 200;
 const FEED_CAP = 6;
 // Same colours as the robots on the board (scene.js ACTOR_COLOR).
 const CHIP = { red1: '#ff3b4e', red2: '#ff7a2f', blue1: '#3f8cff', blue2: '#6c7bff', blue3: '#38b6ff', p1: '#2ff3e0', p2: '#ffd23f' };
+const BACKUP_CHIP = '#c9ffd6'; // the specialist Coach called in (scene.js BACKUP_TINT)
 const AGENT_ORDER = ['blue1', 'blue2', 'blue3', 'red1', 'red2'];
+// The specialist's card sits after the three blue defenders and before the attackers.
+const cardOrder = (a) => {
+  if (isBackup(a)) return 2.5;
+  const i = AGENT_ORDER.indexOf(a.id);
+  return i < 0 ? 99 : i;
+};
 
 export function createRightPanel() {
   const dom = {
@@ -235,12 +242,21 @@ export function createRightPanel() {
   // -------------------------------------------------------- agent cards
 
   function agentCard(a) {
-    const root = el('div', `agent agent-${a.team === 'red' ? 'red' : 'blue'}`);
+    const backup = isBackup(a);
+    const root = el('div', `agent agent-${a.team === 'red' ? 'red' : 'blue'}${backup ? ' agent-backup' : ''}`);
     root.dataset.actor = a.id;
     const chip = el('i', 'agent-chip');
-    chip.style.background = CHIP[a.id] || (a.team === 'red' ? CHIP.red1 : CHIP.blue1);
+    chip.style.background = backup ? BACKUP_CHIP : CHIP[a.id] || (a.team === 'red' ? CHIP.red1 : CHIP.blue1);
     const head = el('div', 'agent-head');
-    head.append(chip, el('span', 'agent-name', a.name || a.id), el('span', 'agent-role', roleText(a)));
+    head.append(chip, el('span', 'agent-name', a.name || a.id));
+    if (backup) {
+      const badge = el('span', 'agent-badge', 'BACKUP');
+      badge.title = 'A specialist the Coach agent called in through BAND during this match';
+      head.append(badge);
+    }
+    const role = el('span', 'agent-role', roleText(a));
+    if (backup) role.title = role.textContent; // the longer text can be cut short by the chip
+    head.append(role);
     const action = el('div', 'agent-action');
     const reason = el('div', 'agent-reason');
     root.append(head, action, reason);
@@ -248,7 +264,7 @@ export function createRightPanel() {
   }
 
   // The reason line must agree with the action line above it. When the agent is waiting now
-  // (a cooldown, or between decisions) but the stored reason belongs to an earlier action, it
+  // (a cooldown after an attack, or between decisions) but the stored reason belongs to an earlier action, it
   // is shown as that: "Last decision (tick 44): ...".
   function setReason(card, r, hidden, actor) {
     if (hidden) {
@@ -261,26 +277,32 @@ export function createRightPanel() {
       setText(card.reason, 'Why: thinking…');
       card.reason.className = 'agent-reason is-muted';
     } else {
-      const stale = !!actor && String(actor.action || 'WAIT') === 'WAIT' && !(Number(actor.busy_ticks) > 0) && r.action !== 'WAIT';
+      const stale = !!actor && String(actor.action || 'WAIT') === 'WAIT' && r.action !== 'WAIT';
       setText(card.reason, stale ? `Last decision (tick ${r.tick}): ${plainReason(r.text)}` : `Why: ${plainReason(r.text)}`);
       card.reason.className = stale ? 'agent-reason is-muted' : 'agent-reason';
     }
+    // The compact layout (Coach box open, or six cards) shows one line: keep the rest reachable.
     card.reason.title = card.reason.textContent;
   }
 
   function renderAgents(state) {
     const actors = (state.actors || []).filter((a) => a.kind === 'agent');
-    actors.sort((a, b) => {
-      const ia = AGENT_ORDER.indexOf(a.id);
-      const ib = AGENT_ORDER.indexOf(b.id);
-      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-    });
+    actors.sort((a, b) => cardOrder(a) - cardOrder(b));
     for (const a of actors) {
       let card = agentCards.get(a.id);
       if (!card) {
+        const late = agentCards.size > 0;
         card = agentCard(a);
         agentCards.set(a.id, card);
-        dom.cards.append(card.root);
+        // Keep the order when a card arrives later than the others (the specialist joins mid-match).
+        const next = actors.slice(actors.indexOf(a) + 1).map((x) => agentCards.get(x.id)).find(Boolean);
+        dom.cards.insertBefore(card.root, next ? next.root : null);
+        if (isBackup(a) && late) {
+          // A short highlight so the eye finds the new card.
+          const root = card.root;
+          root.classList.add('is-new');
+          setTimeout(() => root.classList.remove('is-new'), 1600);
+        }
       }
       card.actor = a;
       const hidden = a.team === 'red' && a.revealed === false && state.phase === 'running';
@@ -294,7 +316,7 @@ export function createRightPanel() {
       }
       setReason(card, r, hidden, a);
     }
-    // Agents that left the match (never happens on the real server).
+    // Agents that left the match (the specialist, when a new match starts).
     for (const [id, card] of agentCards) {
       if (!actors.some((a) => a.id === id)) {
         card.root.remove();

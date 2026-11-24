@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 
 from .config import TUNING, Tuning
 from . import feedback as fb
-from .state import (DIRS, RESOLVE_ORDER, Actor, Card, MatchState, Node, delta, dist, neighbours, node_at)
+from .state import (DIRS, RED_IDS, Actor, Card, MatchState, Node, delta, dist, neighbours, node_at,
+                    resolve_order)
 
 RED_ACTIONS = ("MOVE", "SCAN", "EXPLOIT", "PIVOT", "WAIT")
 BLUE_ACTIONS = ("MOVE", "PATCH", "MONITOR", "ISOLATE", "RESTORE", "WAIT")
@@ -153,7 +154,12 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
     def ev(kind: str, text: str) -> None:
         events.append({"kind": kind, "text": text})
 
-    for aid in RESOLVE_ORDER:
+    # History for the Coach's analysis (state.track): bookkeeping only, no effect on the rules.
+    track = state.track
+    seen_before = {rid: state.actors[rid].revealed for rid in RED_IDS}
+    breached_by: set[str] = set()
+
+    for aid in resolve_order(state):
         actor = state.actors[aid]
         node = state.nodes[actor.node_id]
 
@@ -319,6 +325,12 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
                                             actor.id, card.cve_id))
                     if card.breached_tick is None:
                         card.breached_by, card.breached_tick = actor.name, state.tick
+                    breached_by.add(aid)
+                    track["breaches"].append({
+                        "tick": state.tick, "node": node.id, "cve": card.cve_id,
+                        "rank": card.priority_rank, "monitored": node.monitored,
+                        "open_ticks": state.tick - (card.dropped_tick or 0),
+                        "untouched": card.patch_state == "unpatched", "first": first})
                     actor.revealed_ticks = max(actor.revealed_ticks, t.breach_reveal_ticks)
                     actor.busy_ticks = t.exploit_cooldown_success
                     actor.busy = {"action": "WAIT", "node": None, "card": None, "why": "digging in"}
@@ -379,6 +391,14 @@ def step(state: MatchState, actions: dict[str, Action], rng: random.Random) -> S
             red.revealed_ticks = max(red.revealed_ticks, 1)   # a watched node shows who stands on it
         if red.revealed:
             red.last_seen_node = red.node_id
+        if red.revealed and not seen_before[rid] and rid not in breached_by:
+            track["detections"].append({"tick": state.tick, "node": red.node_id})
+        if state.tick >= t.red_entry_delay:
+            track["red_ticks"] += 1
+            if not red.revealed:
+                track["hidden_ticks"] += 1
+    track["scores"].append((state.score.red, state.score.blue))
+    track["breached"].append(sum(1 for n in state.nodes if n.is_compromised))
     state.tick += 1
     if state.campaign and state.tick >= state.campaign.get("until", 0):
         state.campaign = None
@@ -403,11 +423,13 @@ def _complete(state: MatchState, actor: Actor, b: dict, pol: str, ev, deltas: li
                         f"{actor.name} found nothing left to patch at {node.name}.", card=card, with_score=card is not None)
         card.patch_state = "patched"
         card.patched_by, card.patched_tick = actor.name, state.tick
+        card.patched_by_id, card.patch_gain = actor.id, 0.0
         gained = 0.0
         if not card.attempted:
             gained = node.value * card.score
             state.score.blue += gained
             state.score.patch += gained
+            card.patch_gain = gained
             info["gained"] = gained
             if gained:
                 deltas.append(delta("blue", gained, "patch", node.id, actor.id, card.cve_id))
@@ -430,6 +452,7 @@ def _complete(state: MatchState, actor: Actor, b: dict, pol: str, ev, deltas: li
         state.score.blue += t.restore_points
         state.score.restore += t.restore_points
         deltas.append(delta("blue", t.restore_points, "restore", node.id, actor.id))
+        state.track["restores"].append({"tick": state.tick, "node": node.id, "actor": actor.id})
         ev("restored", f"{actor.name} restored {node.name} (+{t.restore_points:g}).")
         return _row(state, actor, "RESTORE", node.id, "restored", pol,
                     f"{actor.name} finished restoring {node.name}.")

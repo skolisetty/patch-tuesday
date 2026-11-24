@@ -120,7 +120,46 @@ const ROLES = {
   patient: 'scans first, waits for a good breach chance',
 };
 
+// "Call for backup": what each specialist does, as the end of "It ..." / "Responder: ...".
+const SPECIALIST_JOBS = {
+  responder: 'restores breached machines, highest value first',
+  hardener: 'patches the open cards worth the most',
+  sentinel: 'keeps the highest-value machines monitored',
+};
+
+// A string that came from the server or from a human in BAND: trimmed and length-capped.
+export function clip(text, max) {
+  const s = text === null || text === undefined ? '' : String(text).trim();
+  return s.length > max ? `${s.slice(0, max - 1)}\u2026` : s;
+}
+
+// The eighth actor: the specialist Coach called in.
+export function isBackup(actor) {
+  return !!actor && (actor.reinforcement === true || actor.id === 'blue4');
+}
+
+export function specialistName(role) {
+  const s = clip(role, 24).replace(/[^A-Za-z -]/g, '');
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'The specialist';
+}
+
+export function specialistJob(role) {
+  return SPECIALIST_JOBS[String(role || '').toLowerCase()] || '';
+}
+
+// Who said yes. state.backup.by is a human's name from BAND, or "Coach (no reply)" on a timeout.
+export function approvalText(by, short) {
+  const name = clip(by, 40);
+  if (!name) return short ? 'approved in BAND' : 'was approved in BAND';
+  if (name.startsWith('Coach')) return short ? 'no reply in BAND, so Coach called it in' : 'was called in by Coach after no reply in BAND';
+  return short ? `approved by ${name}` : `was approved by ${name}`;
+}
+
 export function roleText(actor) {
+  if (isBackup(actor)) {
+    const job = specialistJob(actor.role);
+    return job ? `Blue AI specialist: ${job}` : 'Blue AI specialist';
+  }
   const side = actor.team === 'red' ? 'Red AI attacker' : 'Blue AI defender';
   const what = ROLES[actor.role];
   return what ? `${side}: ${what}` : side;

@@ -1,0 +1,260 @@
+{
+ "match_id": "m-fixture-slow",
+ "tick": 24,
+ "nodes": [
+  {
+   "id": 0,
+   "name": "MAIL-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-1010",
+     "score": 0.29,
+     "in_kev": false,
+     "priority_rank": 400,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "name": "WEB-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 2,
+   "name": "WEB-02",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 3,
+   "name": "VPN-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-1008",
+     "score": 0.3,
+     "in_kev": false,
+     "priority_rank": 90,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "name": "DNS-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 5,
+   "name": "APP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-1004",
+     "score": 0.5,
+     "in_kev": false,
+     "priority_rank": 60,
+     "patch_state": "patched"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "name": "DB-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": true,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-1001",
+     "score": 0.9,
+     "in_kev": true,
+     "priority_rank": 12,
+     "patch_state": "patched"
+    },
+    {
+     "cve_id": "CVE-2099-1003",
+     "score": 0.2,
+     "in_kev": false,
+     "priority_rank": 150,
+     "patch_state": "patched"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "name": "FILE-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 8,
+   "name": "HR-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-1009",
+     "score": 0.95,
+     "in_kev": true,
+     "priority_rank": 2,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "name": "DEV-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 10,
+   "name": "CI-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 11,
+   "name": "DC-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 12,
+   "name": "ERP-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-1005",
+     "score": 0.1,
+     "in_kev": false,
+     "priority_rank": null,
+     "patch_state": "patched"
+    },
+    {
+     "cve_id": "CVE-2099-1007",
+     "score": 0.35,
+     "in_kev": false,
+     "priority_rank": 75,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "name": "WIKI-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 14,
+   "name": "PRINT-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 15,
+   "name": "BKP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 16,
+   "name": "IOT-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 17,
+   "name": "POS-01",
+   "value": 2,
+   "state": "compromised",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-1002",
+     "score": 0.6,
+     "in_kev": false,
+     "priority_rank": 300,
+     "patch_state": "unpatched"
+    },
+    {
+     "cve_id": "CVE-2099-1006",
+     "score": 0.4,
+     "in_kev": false,
+     "priority_rank": 70,
+     "patch_state": "patched"
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "name": "LAB-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 19,
+   "name": "JUMP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  }
+ ],
+ "score": {
+  "red": 59.0,
+  "blue": 5.7,
+  "breaches_total": 2,
+  "breaches_in_top50": 1,
+  "breakdown": {
+   "blue": {
+    "patch": 2.7,
+    "restore": 3.0,
+    "isolate_cost": 0.0
+   },
+   "red": {
+    "first_breach": 10.0,
+    "held": 49.0
+   }
+  }
+ }
+}

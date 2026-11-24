@@ -1,0 +1,215 @@
+{
+ "match_id": "m-fixture-blind",
+ "tick": 24,
+ "nodes": [
+  {
+   "id": 0,
+   "name": "MAIL-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 1,
+   "name": "WEB-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 2,
+   "name": "WEB-02",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 3,
+   "name": "VPN-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 4,
+   "name": "DNS-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 5,
+   "name": "APP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-3001",
+     "score": 0.55,
+     "in_kev": false,
+     "priority_rank": 120,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "name": "DB-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 7,
+   "name": "FILE-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 8,
+   "name": "HR-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 9,
+   "name": "DEV-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 10,
+   "name": "CI-01",
+   "value": 2,
+   "state": "compromised",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-3002",
+     "score": 0.45,
+     "in_kev": false,
+     "priority_rank": null,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "name": "DC-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 12,
+   "name": "ERP-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-3004",
+     "score": 0.25,
+     "in_kev": false,
+     "priority_rank": 200,
+     "patch_state": "patched"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "name": "WIKI-01",
+   "value": 1,
+   "state": "compromised",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-3003",
+     "score": 0.4,
+     "in_kev": false,
+     "priority_rank": 80,
+     "patch_state": "patched"
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "name": "PRINT-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 15,
+   "name": "BKP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 16,
+   "name": "IOT-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 17,
+   "name": "POS-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 18,
+   "name": "LAB-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 19,
+   "name": "JUMP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  }
+ ],
+ "score": {
+  "red": 14.0,
+  "blue": 0.75,
+  "breaches_total": 2,
+  "breaches_in_top50": 0,
+  "breakdown": {
+   "blue": {
+    "patch": 0.75,
+    "restore": 0.0,
+    "isolate_cost": 0.0
+   },
+   "red": {
+    "first_breach": 10.0,
+    "held": 4.0
+   }
+  }
+ }
+}

@@ -8,3 +8,9 @@ environments:
       duckdb:
         - name: "duckdb-default"
           path: "/home/<you>/.patch-tuesday/world.duckdb"
+        # The coach pipeline (pipelines/coach, the Coach's analysis for "Call for backup") has its
+        # own file, so it can run during a match while the weekly pipeline advances: DuckDB allows
+        # one writer per file. Do not name a schema "coach" in it (the catalog is named after the
+        # file). Only `bruin` opens it, one run at a time (scripts/coach.py holds data/.coach.lock).
+        - name: "duckdb-coach"
+          path: "/home/<you>/.patch-tuesday/coach.duckdb"

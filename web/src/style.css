@@ -2362,3 +2362,296 @@ kbd {
   color: #ffd23f;
 }
 
+
+/* --------------------------------------------- call for backup (state.backup) */
+
+:root {
+  --backup: #c9ffd6; /* the specialist's white-green, as on the board */
+}
+
+/* Coach box: top of the right panel. Slim line while watching, full box from the analysis on. */
+.coach {
+  flex: 0 0 auto;
+  margin: 0.45rem 0.5rem 0.1rem;
+  padding: 0.35rem 0.55rem 0.4rem;
+  border: 1px solid #2f5a45;
+  border-left: 0.25rem solid var(--backup);
+  border-radius: 0.3rem;
+  background: rgba(201, 255, 214, 0.06);
+  max-height: 46%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a3b56 transparent;
+}
+
+.coach-slim {
+  padding: 0.25rem 0.55rem;
+  border-color: var(--line);
+  border-left-color: #6fae84;
+  background: transparent;
+}
+
+.coach-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.coach-tag {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.2rem;
+  color: #04140a;
+  background: var(--backup);
+}
+
+.coach-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 800;
+  font-size: 1rem;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-toggle {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 0.05rem 0.5rem;
+  cursor: pointer;
+}
+
+.coach-toggle:hover {
+  color: #fff;
+  border-color: var(--backup);
+}
+
+.coach-evidence,
+.coach-players {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  font-size: 0.84rem;
+  line-height: 1.3;
+}
+
+.coach-evidence li {
+  position: relative;
+  padding-left: 0.85rem;
+  color: var(--text);
+}
+
+.coach-evidence li::before {
+  content: '';
+  position: absolute;
+  left: 0.1rem;
+  top: 0.48em;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--backup);
+}
+
+.coach-players li {
+  padding-left: 0.85rem;
+  color: #a9b8cc;
+}
+
+.coach-rec {
+  margin-top: 0.3rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--backup);
+}
+
+.coach-state {
+  margin-top: 0.3rem;
+  font-size: 0.86rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.coach-slim .coach-state {
+  margin-top: 0;
+  font-size: 0.8rem;
+  color: #a9b8cc;
+}
+
+.coach.is-asked .coach-state {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.coach.is-joined .coach-state {
+  font-weight: 700;
+  color: var(--backup);
+}
+
+.coach.is-declined .coach-state,
+.coach.is-unavailable .coach-state {
+  color: #a9b8cc;
+}
+
+/* Time left to answer. */
+.coach-bar {
+  height: 0.22rem;
+  margin-top: 0.3rem;
+  border-radius: 0.2rem;
+  background: #1a2639;
+  overflow: hidden;
+}
+
+.coach-bar i {
+  display: block;
+  height: 100%;
+  background: var(--backup);
+  transition: width 0.4s linear;
+}
+
+/* Compact agent cards: set while the Coach box is open or a sixth card is shown. */
+#ledger-panel.is-crowded .agent {
+  padding: 0.22rem 0.5rem 0.25rem;
+}
+
+#ledger-panel.is-crowded .agent-reason {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  min-height: 0;
+}
+
+#ledger-panel.is-crowded .agent-cards {
+  gap: 0.22rem;
+}
+
+/* While Coach's evidence is showing, the feed gives up half its rows to the agent cards. */
+#ledger-panel.is-coach-open .feed {
+  height: 4.1rem;
+}
+
+/* The specialist's card in the Agents tab. */
+.agent-backup {
+  border-left-color: var(--backup);
+  background-color: rgba(201, 255, 214, 0.07);
+  transition: background-color 1.2s ease-out;
+}
+
+.agent-backup.is-new {
+  background-color: rgba(201, 255, 214, 0.3);
+  transition: none;
+}
+
+.agent-badge {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.02rem 0.35rem;
+  border-radius: 0.2rem;
+  color: #04140a;
+  background: var(--backup);
+}
+
+/* Events strip and banner. */
+.tk-coach,
+.tk-backup {
+  border-color: #6fae84;
+  background: rgba(201, 255, 214, 0.1);
+}
+
+.tk-backup {
+  border-color: var(--backup);
+  background: rgba(201, 255, 214, 0.2);
+}
+
+.tk-coach .tk-kind,
+.tk-backup .tk-kind {
+  color: var(--backup);
+}
+
+.banner-backup {
+  background: rgba(201, 255, 214, 0.96);
+  color: #04140a;
+}
+
+.brief-note b.t-backup {
+  color: var(--backup);
+}
+
+/* Debrief: the before / after table. */
+.db-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.db-table th,
+.db-table td {
+  padding: 0.28rem 0.6rem 0.28rem 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  color: #c4d0e0;
+}
+
+.db-table th {
+  border-top: 0;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.db-table th:not(:first-child),
+.db-table td.num {
+  text-align: right;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.db-table td.num {
+  color: #fff;
+  font-weight: 700;
+}
+
+.db-table td.is-better {
+  color: #2bd98a;
+}
+
+.db-table td.is-worse {
+  color: var(--isolated);
+}
+
+.db-foot {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  color: #6b7c94;
+}
+
+/* --------------------------------------------------------------- agent voices */
+
+.voice-btn {
+  margin-left: 0.3rem;
+  opacity: 0.75;
+}
+
+.voice-btn.is-on {
+  opacity: 1;
+  color: #04140d;
+  background: var(--healthy);
+  border-color: var(--healthy);
+}

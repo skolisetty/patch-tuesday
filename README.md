@@ -102,6 +102,12 @@ Triage and Patcher also break off to restore a breached machine when they are th
 defender. Every decision each of the seven makes is written to a log with a one-sentence reason,
 visible on screen.
 
+**Call for backup (optional, with [BAND](https://band.ai)).** A Coach agent watches the match and
+works out what the Blue team is weakest at. It says so in a BAND chat room, where the three blue
+agents answer as separate agents, and asks a human to approve one specialist: Responder, Hardener
+or Sentinel. On "yes" the specialist joins the room and walks onto the board as a fourth blue AI
+agent. Setup and the whole flow: [docs/BAND.md](docs/BAND.md).
+
 ## Where to read next
 
 | Document | For whom | What is in it |
@@ -110,6 +116,7 @@ visible on screen.
 | [docs/UI_GUIDE.md](docs/UI_GUIDE.md) | Players | Every panel, colour and icon on the screen |
 | [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) | Anyone curious | The three loops (tick, match, week) and one real CVE followed end to end |
 | [docs/DEMO.md](docs/DEMO.md) | Presenters, judges | A timed 2-minute demo and a sheet mapping the hackathon criteria to the screen and the repo |
+| [docs/BAND.md](docs/BAND.md) | Anyone interested in BAND | Call for backup: agents talking in a room, a human approving, a specialist joining the team |
 | [docs/RUNNING.md](docs/RUNNING.md) | Whoever runs it | Setup, daily commands, sharing with teammates, troubleshooting |
 | [docs/PIPELINE.md](docs/PIPELINE.md) | Data engineers | How the project uses Bruin: layers, all 27 assets, the feature map |
 | [docs/MODEL_AND_GATE.md](docs/MODEL_AND_GATE.md) | ML and security readers | The model, the gate, 12 weeks of results, the leakage audit, known limits |

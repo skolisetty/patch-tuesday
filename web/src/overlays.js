@@ -2,7 +2,7 @@
 // and the end-of-match debrief. Opening or closing either never changes the match.
 
 import { $, el, fmtInt, fmtScore, isNum, onClick, plural, setText } from './dom.js';
-import { fateSentence, revealSentence } from './wording.js';
+import { approvalText, clip, fateSentence, isBackup, revealSentence, specialistJob, specialistName } from './wording.js';
 
 // --------------------------------------------------------------- briefing
 
@@ -12,6 +12,7 @@ export function createBriefing({ onStart, onChange }) {
   const start = $('brief-start');
   const close = $('brief-close');
   const helpBtn = $('btn-help');
+  const backupNote = $('brief-backup');
   let phase = 'lobby';
   let auto = false; // opened by the lobby, not by the "?" button
   let dismissedMatch = null; // lobby briefing closed by hand for this match
@@ -50,6 +51,8 @@ export function createBriefing({ onStart, onChange }) {
     const w = state.world || {};
     setText(source, w.score_source === 'model' ? `our model${w.model_version ? ` (${w.model_version})` : ''}` : 'the EPSS baseline');
     setText(start, phase === 'running' ? 'Back to the match' : phase === 'ended' ? 'Play again' : 'Start the match');
+    // "Call for backup" is on exactly when the server sends state.backup.
+    if (backupNote) backupNote.hidden = !(state.backup && typeof state.backup === 'object');
     if (phase === 'lobby' && root.hidden && dismissedMatch !== matchId) open(true);
     else if (phase !== 'lobby' && auto) shut(); // someone else pressed Start
   }
@@ -89,6 +92,86 @@ function breakdownBar(team, total, parts, values, scale) {
   });
   wrap.append(head, bar, legend);
   return wrap;
+}
+
+// ---- "Backup": who joined, when, who approved, and the numbers before and after (state.backup).
+
+// [field, label, lower is better for Blue]
+const BACKUP_ROWS = [
+  ['red_per_tick', "Red's income per tick", true],
+  ['breaches', 'Breaches', true],
+  ['avg_breach_ticks', 'Average ticks a machine stayed breached', true],
+  ['blue_per_tick', "Blue's points per tick", false],
+];
+
+const fmtStat = (v) => (isNum(v) ? fmtScore(Math.round(Number(v) * 10) / 10) : '—');
+
+function backupSection(state) {
+  const b = state.backup;
+  if (!b || typeof b !== 'object') return null;
+  const status = String(b.status || '');
+  if (status !== 'joined' && status !== 'declined') return null;
+  const sec = el('section', 'db-sec db-backup');
+  sec.append(el('h3', null, 'Backup'));
+  const weakness = b.weakness && b.weakness.title ? clip(b.weakness.title, 60) : '';
+  const found = weakness ? `Coach found the team's weakness: ${weakness.charAt(0).toLowerCase()}${weakness.slice(1)}. ` : '';
+
+  if (status === 'declined') {
+    const by = clip(b.by, 40);
+    const how = !by ? 'Backup was declined' : by.startsWith('Coach') ? 'Nobody replied in BAND and Coach stood down' : `Backup was declined by ${by}`;
+    sec.append(el('p', 'db-lead', `${found}${how}, so no specialist joined.`));
+    return sec;
+  }
+
+  const actor = (state.actors || []).find((a) => a && isBackup(a));
+  const who = clip(actor && actor.name, 30) || specialistName(b.chosen || b.recommended);
+  const at = isNum(b.joined_tick) ? ` at tick ${Number(b.joined_tick)}` : '';
+  const job = specialistJob(b.chosen || (actor && actor.role) || b.recommended);
+  sec.append(el('p', 'db-lead', `${found}${who} joined the Blue team${at} (${approvalText(b.by, true)}).${job ? ` It ${job}.` : ''}`));
+
+  const before = b.before && typeof b.before === 'object' ? b.before : null;
+  const after = b.after && typeof b.after === 'object' ? b.after : null;
+  if (!before || !after) {
+    sec.append(el('p', 'db-none', 'The before and after numbers for this match are not available.'));
+    return sec;
+  }
+  const ticks = (o) => (isNum(o.ticks) ? ` (${plural(Number(o.ticks), 'tick')})` : '');
+  const table = el('table', 'db-table');
+  const head = el('tr');
+  head.append(el('th', null, ''), el('th', null, `Before backup${ticks(before)}`), el('th', null, `With ${who}${ticks(after)}`), el('th', null, 'Change'));
+  table.append(head);
+  for (const [key, label, lowerIsBetter] of BACKUP_ROWS) {
+    let x = before[key];
+    let y = after[key];
+    const tr = el('tr');
+    const cells = [fmtStat(x), fmtStat(y)];
+    let name = label;
+    // Breaches are counts over two periods of different length: compare them per 10 ticks.
+    if (key === 'breaches' && isNum(before.ticks) && isNum(after.ticks) && before.ticks > 0 && after.ticks > 0) {
+      name = 'Breaches (and per 10 ticks)';
+      const rx = isNum(x) ? (Number(x) / before.ticks) * 10 : null;
+      const ry = isNum(y) ? (Number(y) / after.ticks) * 10 : null;
+      if (rx !== null) cells[0] = `${fmtStat(x)} (${fmtStat(rx)})`;
+      if (ry !== null) cells[1] = `${fmtStat(y)} (${fmtStat(ry)})`;
+      x = rx;
+      y = ry;
+    }
+    let change = '—';
+    let cls = '';
+    if (isNum(x) && isNum(y)) {
+      const d = Math.round((Number(y) - Number(x)) * 10) / 10;
+      if (d === 0) change = 'no change';
+      else {
+        change = `${d < 0 ? 'down' : 'up'} ${fmtScore(Math.abs(d))}`;
+        cls = (d < 0) === lowerIsBetter ? 'is-better' : 'is-worse';
+      }
+    }
+    tr.append(el('td', null, name), el('td', 'num', cells[0]), el('td', 'num', cells[1]), el('td', `num ${cls}`, change));
+    table.append(tr);
+  }
+  sec.append(table);
+  sec.append(el('p', 'db-foot', 'Green: better for Blue. Amber: worse. One match is one sample, not proof.'));
+  return sec;
 }
 
 export function createDebrief({ onStart, onChange }) {
@@ -140,6 +223,14 @@ export function createDebrief({ onStart, onChange }) {
       frag.append(sec);
     }
 
+    let backup = null;
+    try {
+      backup = backupSection(state);
+    } catch (err) {
+      console.error('debrief: backup section failed', err); // never lose the rest of the card over it
+    }
+    if (backup) frag.append(backup);
+
     const rv = state.reveal;
     if (rv && typeof rv === 'object') {
       const sec = el('section', 'db-sec');
@@ -177,7 +268,7 @@ export function createDebrief({ onStart, onChange }) {
       return;
     }
     // Rebuild when the content changes: reveal can arrive a moment after the final tick.
-    const sig = JSON.stringify([state.match_id, state.score, state.reveal ?? null]);
+    const sig = JSON.stringify([state.match_id, state.score, state.reveal ?? null, state.backup ?? null]);
     shownFor = state.match_id;
     if (sig !== lastSig) build(state);
     lastSig = sig;

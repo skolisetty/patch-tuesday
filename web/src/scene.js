@@ -1,4 +1,5 @@
-// 3D view: a 5x4 grid of server racks and seven characters.
+// 3D view: a 5x4 grid of server racks and seven characters, or eight once the Coach's
+// specialist ("blue4", reinforcement: true) has joined the Blue team.
 // Everything here is driven by the "state" message in docs/CONTRACTS.md.
 
 import * as THREE from 'three';
@@ -60,9 +61,16 @@ const ACTOR_TINT = {
   p2: 0xffd23f,
 };
 const TEAM_TINT = { red: 0xff3b4e, blue: 0x3f8cff };
+// The specialist called in as backup: white-green, unlike any other character.
+const BACKUP_TINT = 0xc9ffd6;
+const BACKUP_CSS = '#c9ffd6';
+const ARRIVE_MS = 1900; // length of its arrival effect
 
-// Where each actor stands on a node pad, so seven can share one node.
+const isBackupActor = (a) => !!a && (a.reinforcement === true || a.id === 'blue4');
+
+// Where each actor stands on a node pad, so all eight can share one node.
 const SLOT = {
+  blue4: [0.0, 2.3], // front centre, between the two attackers' slots
   p1: [-0.8, 1.55],
   p2: [0.8, 1.55],
   blue1: [-1.5, 0.8],
@@ -87,9 +95,9 @@ function combineBoxes(boxes) {
   return merged;
 }
 
-function slotPosition(nodeId, actorId, out) {
+function slotPosition(nodeId, actor, out) {
   const c = nodeCenter(Number.isFinite(nodeId) ? nodeId : 0);
-  const s = SLOT[actorId] || [0, 1.5];
+  const s = SLOT[actor.id] || (isBackupActor(actor) ? SLOT.blue4 : [0, 1.5]);
   return out.set(c.x + s[0], PAD_Y, c.z + s[1]);
 }
 
@@ -450,7 +458,11 @@ class ActorView {
     this.id = actor.id;
     this.team = actor.team === 'red' ? 'red' : 'blue';
     this.kind = actor.kind;
-    this.tint = ACTOR_TINT[actor.id] ?? TEAM_TINT[this.team];
+    this.backup = isBackupActor(actor);
+    this.tint = this.backup ? BACKUP_TINT : ACTOR_TINT[actor.id] ?? TEAM_TINT[this.team];
+    this.fx = null; // arrival effect, while it runs
+    this.grow = 1; // body scale during the arrival effect
+    this.bodyScale = 1;
     this.group = new THREE.Group();
     this.materials = [];
     this.meshes = [];
@@ -478,16 +490,17 @@ class ActorView {
     if (template) this.buildRobot(template);
     else this.buildCapsule();
 
-    if (this.kind === 'human') {
-      // Ground marker so each player can find their own character.
+    if (this.kind === 'human' || this.backup) {
+      // Ground marker so each player can find their own character (a thinner, wider ring
+      // marks the specialist).
       this.markerMat = new THREE.MeshBasicMaterial({
         color: this.tint,
         transparent: true,
-        opacity: 0.9,
+        opacity: this.backup ? 0.75 : 0.9,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
-      this.marker = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.66, 40), this.markerMat);
+      this.marker = new THREE.Mesh(this.backup ? new THREE.RingGeometry(0.6, 0.67, 40) : new THREE.RingGeometry(0.5, 0.66, 40), this.markerMat);
       this.marker.rotation.x = -Math.PI / 2;
       this.marker.position.y = 0.03;
       this.group.add(this.marker);
@@ -509,6 +522,8 @@ class ActorView {
       return;
     }
     const obj = SkeletonUtils.clone(template.scene);
+    this.bodyScale = template.scale;
+    this.robot = obj;
     obj.scale.setScalar(template.scale);
     obj.position.y = template.offsetY;
     const tint = new THREE.Color(this.tint);
@@ -656,10 +671,56 @@ class ActorView {
     tex.needsUpdate = true;
   }
 
+  // The specialist steps onto the board: a beam of light, a ring on the pad, and it grows in.
+  arrive(now) {
+    this.endArrival();
+    const mat = (opacity) => new THREE.MeshBasicMaterial({
+      color: BACKUP_TINT,
+      transparent: true,
+      opacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 5.4, 24, 1, true), mat(0.3));
+    beam.position.y = 2.7;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.0, 48), mat(0.9));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.09;
+    beam.renderOrder = 15;
+    ring.renderOrder = 15;
+    this.group.add(beam, ring);
+    this.fx = { beam, ring, t0: now };
+    this.grow = 0.02;
+  }
+
+  endArrival() {
+    if (!this.fx) return;
+    for (const m of [this.fx.beam, this.fx.ring]) {
+      this.group.remove(m);
+      m.geometry.dispose();
+      m.material.dispose();
+    }
+    this.fx = null;
+    this.grow = 1;
+    if (this.robot) this.robot.scale.setScalar(this.bodyScale);
+  }
+
+  // Frees what only this view owns, when its actor leaves the match.
+  dispose() {
+    this.endArrival();
+    if (this.marker) {
+      this.marker.geometry.dispose();
+      this.markerMat.dispose();
+    }
+    this.tag.tex.dispose();
+    this.tag.mat.dispose();
+  }
+
   // Called once per state message.
   apply(a, ctx) {
     const { now, tickMs, tmp } = ctx;
-    slotPosition(a.node_id, a.id, tmp);
+    slotPosition(a.node_id, a, tmp);
     if (!this.inited) {
       this.inited = true;
       this.group.position.copy(tmp);
@@ -707,6 +768,21 @@ class ActorView {
     const body = this.group.children[0];
     body.rotation.y = this.yaw;
 
+    if (this.fx) {
+      const k = (now - this.fx.t0) / ARRIVE_MS;
+      if (k >= 1) this.endArrival();
+      else {
+        const g = Math.min(1, k / 0.35);
+        this.grow = 0.02 + 0.98 * (1 - (1 - g) * (1 - g));
+        const { beam, ring } = this.fx;
+        beam.material.opacity = 0.3 * (1 - k) * (1 - k);
+        beam.scale.set(1 - 0.55 * k, 1, 1 - 0.55 * k);
+        ring.scale.setScalar(0.5 + 2.6 * k);
+        ring.material.opacity = 0.9 * (1 - k);
+        if (this.robot) this.robot.scale.setScalar(this.bodyScale * this.grow);
+      }
+    }
+
     if (this.mixer) this.mixer.update(dt);
     if (this.character) this.character.update(t, this.moving, this.currentAction, this.base, this.pulse);
     if (this.capsule) {
@@ -714,7 +790,7 @@ class ActorView {
       const p = (now - this.pulse) / 450;
       const s = p >= 0 && p < 1 ? 1 + 0.28 * Math.sin(p * Math.PI) : 1;
       this.capsule.position.y = bob;
-      this.capsule.scale.setScalar(s * (ROBOT_HEIGHT / 1.57));
+      this.capsule.scale.setScalar(s * this.grow * (ROBOT_HEIGHT / 1.57));
     }
     if (this.marker) {
       const s = 1 + 0.12 * Math.sin(t * 4);
@@ -991,6 +1067,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   let pendingState = null;
   let tickMs = 2000;
   let lastPhase = null;
+  let actorsShown = false; // true once a state's actors have been drawn: later arrivals are news
   let prevCards = new Map(); // card_id -> patch_state
   const tmp = new THREE.Vector3();
 
@@ -1051,10 +1128,19 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     for (const a of list) {
       if (!a || a.id == null) continue;
       seen.add(a.id);
+      const arriving = !actors.has(a.id) && actorsShown && phase === 'running' && isBackupActor(a);
       const view = actors.get(a.id) || makeActor(a);
       const prev = view.prev;
       const movedNode = prev && prev.node_id !== a.node_id;
       view.apply(a, ctx);
+      if (arriving) {
+        // The specialist joins mid-match: show where, and who.
+        view.arrive(now);
+        view.playEmote('Wave', now);
+        if (Number.isInteger(a.node_id) && nodes[a.node_id]) {
+          spawnFloat(a.node_id, `${String(a.name ?? 'Backup').slice(0, 14)} joined`, BACKUP_CSS, now, 0);
+        }
+      }
 
       // Face the rack while working on it, the camera otherwise.
       const working = ['PATCH', 'MONITOR', 'ISOLATE', 'RESTORE', 'EXPLOIT', 'SCAN'].includes(a.action);
@@ -1103,9 +1189,11 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     for (const [id, view] of actors) {
       if (!seen.has(id)) {
         scene.remove(view.group);
+        view.dispose();
         actors.delete(id);
       }
     }
+    actorsShown = true;
     lastPhase = phase;
   }
 

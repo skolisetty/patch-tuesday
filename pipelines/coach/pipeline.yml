@@ -1,0 +1,69 @@
+name: patch-tuesday-coach
+schedule: daily
+start_date: "2026-01-01"
+catchup: false
+retries: 0
+
+# Its OWN DuckDB file (see .bruin.yml.example). The Coach's analysis runs in the middle of a match,
+# possibly while the weekly pipeline is advancing the world: a separate file means the two can never
+# wait on each other's database lock, and nothing here can touch the weekly tables.
+default_connections:
+  duckdb: "duckdb-coach"
+
+# Game constants the analysis needs. The defaults are game/config.py's Tuning; state.json may
+# carry a "tuning" object with the match's real values, which wins over these defaults.
+# The last four are the Coach's own thresholds (docs/BAND.md, "The three weaknesses") and the
+# tolerance of the score reconciliation.
+variables:
+  first_breach_points:
+    type: number
+    default: 5.0
+    description: Points Red earns the first time a machine is breached.
+  restore_points:
+    type: number
+    default: 3.0
+    description: Points Blue earns for a finished restore.
+  isolate_cost:
+    type: number
+    default: 1.0
+    description: Points Blue pays per tick for every isolated machine.
+  monitor_ticks:
+    type: integer
+    default: 3
+    description: Ticks a MONITOR action keeps a machine monitored (the tick of the action included).
+  restore_monitor_ticks:
+    type: integer
+    default: 6
+    description: Ticks a machine stays monitored after a finished restore (the tick of the restore included).
+  isolate_ticks:
+    type: integer
+    default: 5
+    description: Ticks an ISOLATE action keeps a machine isolated (the tick of the action included).
+  breach_reveal_ticks:
+    type: integer
+    default: 2
+    description: A breach shows its attacker; it is in sight at the end of breach_reveal_ticks - 1 ticks.
+  detect_ticks:
+    type: integer
+    default: 3
+    description: A detected failed exploit shows its attacker; it is in sight at the end of detect_ticks - 1 ticks.
+  red_entry_delay:
+    type: integer
+    default: 10
+    description: The attackers are active from this tick; earlier ticks do not count as attacker time.
+  hot_danger:
+    type: number
+    default: 0.30
+    description: An open card counts as dangerous at this danger or more.
+  hot_value:
+    type: integer
+    default: 2
+    description: ... on a machine of this value or more.
+  long_open_ticks:
+    type: integer
+    default: 10
+    description: A card counts as left open when it was on the board, with no patch started, for this many ticks before the breach.
+  reconcile_tolerance:
+    type: number
+    default: 0.05
+    description: Largest allowed difference between a score component derived from the ledger and the same component in state.json (which is rounded to 2 decimals).
