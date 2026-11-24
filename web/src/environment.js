@@ -5,9 +5,9 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 export function createEnvironment(scene, nodeCenter) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const group = new THREE.Group(); scene.add(group);
-  const dark = new THREE.MeshStandardMaterial({ color: 0x18272b, metalness: 0.22, roughness: 0.6 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0x26373a, metalness: 0.45, roughness: 0.4 });
-  const glow = new THREE.MeshBasicMaterial({ color: 0x5d9d8e, toneMapped: false });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x070c12, metalness: 0.6, roughness: 0.45 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x101a24, metalness: 0.8, roughness: 0.3 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x19f7c1, toneMapped: false });
   function box(size, pos, mat, r = 0.06) {
     const m = new THREE.Mesh(new RoundedBoxGeometry(...size, 2, r), mat);
     m.position.set(...pos); m.receiveShadow = true; group.add(m); return m;
@@ -79,7 +79,7 @@ export function createEnvironment(scene, nodeCenter) {
     const id = y * 5 + x;
     for (const next of [x < 4 ? id + 1 : -1, y < 3 ? id + 5 : -1]) if (next >= 0) links.push([nodeCenter(id), nodeCenter(next)]);
   }
-  const packets = new THREE.InstancedMesh(new THREE.SphereGeometry(0.045, 6, 4), new THREE.MeshBasicMaterial({ color: 0x65d5d2 }), links.length);
+  const packets = new THREE.InstancedMesh(new THREE.SphereGeometry(0.045, 6, 4), new THREE.MeshBasicMaterial({ color: 0x3cf2ff }), links.length);
   group.add(packets);
   const dummy = new THREE.Object3D();
   const sparkCount = 180;
