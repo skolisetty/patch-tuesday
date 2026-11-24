@@ -19,7 +19,7 @@ code, logs or file names are listed with an arrow (→) to the name used now.
 | monitor | Blue action, 3 ticks. Watches a machine: halves the breach chance there and reveals an attacker standing on it |
 | isolate | Blue action, 5 ticks. Cuts a machine off so it cannot be attacked. Costs Blue 1 point per tick |
 | tick | One step of the game clock, 2 seconds by default. Every player and agent acts once per tick |
-| match | One game: 150 ticks, 5 minutes |
+| match | One game: 30 ticks, 1 minute (`PT_MATCH_TICKS=150` gives the full 5-minute match) |
 | Blue team | The defenders: Player 1, Player 2 and the AI agents Triage, Patcher and Hunter |
 | Red team | The attackers: the AI agents Opportunist and Patient. Hidden unless revealed |
 | agent | A character played by the computer. There are five on the board, and a sixth when a specialist is called in |

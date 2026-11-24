@@ -50,6 +50,7 @@ def start_server(tmp: Path, port: int, tick: float = TICK) -> subprocess.Popen:
     env = dict(os.environ)
     env.update({
         "PT_TICK_SECONDS": str(tick),
+        "PT_MATCH_TICKS": "150",
         "PT_LEDGER_DIR": str(tmp / "ledger"),
         "PT_GAME_DB": str(tmp / "game.duckdb"),
         "PT_ADVANCE_SCRIPT": str(tmp / "no-advance.py"),

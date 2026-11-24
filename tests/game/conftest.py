@@ -43,3 +43,5 @@ def next_serving(mock_dir):
 import os as _os
 
 _os.environ.setdefault("PT_IDLE_TICKS", "0")
+# The balance and contract tests are written for the full 150-tick match; the served default is 30.
+_os.environ.setdefault("PT_MATCH_TICKS", "150")

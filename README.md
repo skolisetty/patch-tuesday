@@ -125,7 +125,7 @@ of a live match, following the timed script in [docs/DEMO.md](docs/DEMO.md).
 
 ## How you win
 
-A match lasts 5 minutes: 150 ticks of 2 seconds, a tick being one step of the game clock. The team
+A match lasts 1 minute: 30 ticks of 2 seconds (set `PT_MATCH_TICKS=150` for the full 5-minute match), a tick being one step of the game clock. The team
 with the higher score wins.
 
 | What happens | Points |

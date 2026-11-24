@@ -147,6 +147,36 @@ class Tuning:
 
 TUNING = Tuning()
 
+MATCH_TICKS_DEFAULT = 30    # one minute at 2 s a tick
+
+
+def match_ticks() -> int:
+    """Length of a served match in ticks: PT_MATCH_TICKS, else 30 (one minute at 2 s a tick)."""
+    return max(10, int(env_float("PT_MATCH_TICKS", MATCH_TICKS_DEFAULT)))
+
+
+def match_tuning(tuning: "Tuning | None" = None, ticks: int | None = None) -> "Tuning":
+    """The tuning for a match of `ticks` ticks. The balance constants were tuned for 150 ticks; in a
+    shorter match the waits and cooldowns shrink with it, so both teams still get to act."""
+    tuning = tuning or TUNING
+    ticks = ticks or match_ticks()
+    if ticks == tuning.ticks_total:
+        return tuning
+    f = ticks / 150.0
+    if f >= 1:
+        return tuning.with_overrides(ticks_total=ticks)
+
+    def scaled(name: str, low: int) -> int:
+        return max(low, round(getattr(tuning, name) * f))
+
+    return tuning.with_overrides(
+        ticks_total=ticks, red_entry_delay=scaled("red_entry_delay", 2),
+        exploit_cooldown_fail=scaled("exploit_cooldown_fail", 2),
+        exploit_cooldown_success=scaled("exploit_cooldown_success", 4),
+        eject_cooldown=scaled("eject_cooldown", 3), campaign_ticks=scaled("campaign_ticks", 8),
+        world_change_cutoff=scaled("world_change_cutoff", 5), intel_cooldown=scaled("intel_cooldown", 8),
+        patient_stale_ticks=scaled("patient_stale_ticks", 6))
+
 TICK_SECONDS_DEFAULT = 2.0
 
 

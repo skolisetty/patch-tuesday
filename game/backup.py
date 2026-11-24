@@ -551,7 +551,7 @@ class BackupConfig:
     room: str = ROOM_NAME
 
     @classmethod
-    def from_env(cls, tick_seconds: float | None = None) -> "BackupConfig":
+    def from_env(cls, tick_seconds: float | None = None, ticks_total: int | None = None) -> "BackupConfig":
         def num(name: str, default: int) -> int:
             try:
                 v = int(float(game_config.env(name) or default))
@@ -560,9 +560,19 @@ class BackupConfig:
             return v if v > 0 else default
 
         secs = tick_seconds if (tick_seconds and tick_seconds > 0) else game_config.tick_seconds()
-        return cls(checkpoint_tick=num("BAND_BACKUP_TICK", 40), wait_ticks=num("BAND_BACKUP_WAIT_TICKS", 15),
-                   auto=game_config.env("BAND_BACKUP_AUTO", "1") != "0",
-                   gap_ticks=max(1, math.ceil(3.0 / secs)), report_gap_ticks=max(1, math.ceil(15.0 / secs)))
+        cfg = cls(checkpoint_tick=num("BAND_BACKUP_TICK", 40), wait_ticks=num("BAND_BACKUP_WAIT_TICKS", 15),
+                  auto=game_config.env("BAND_BACKUP_AUTO", "1") != "0",
+                  gap_ticks=max(1, math.ceil(3.0 / secs)), report_gap_ticks=max(1, math.ceil(15.0 / secs)))
+        if ticks_total and ticks_total < 150:
+            # A short match: Coach looks early and waits briefly, so the specialist still gets to play.
+            n = ticks_total
+            cfg.checkpoint_tick = min(cfg.checkpoint_tick, max(4, n // 5))
+            cfg.wait_ticks = min(cfg.wait_ticks, max(3, n // 6))
+            cfg.last_ticks = min(cfg.last_ticks, max(3, n // 5))
+            cfg.human_min_tick = min(cfg.human_min_tick, max(2, n // 10))
+            cfg.early_after_tick = min(cfg.early_after_tick, max(3, n // 8))
+            cfg.report_gap_ticks = min(cfg.report_gap_ticks, max(2, n // 8))
+        return cfg
 
 
 SPEAKERS = {"blue1": "triage", "blue2": "patcher", "blue3": "hunter"}

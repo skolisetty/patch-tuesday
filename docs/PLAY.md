@@ -9,8 +9,8 @@ You are the **Blue team**: two human players and three AI defenders. Two hidden 
 attackers try to break into a network of 20 **machines**. When the clock runs out, the team with
 the higher score wins.
 
-A match is 150 **ticks**. A tick is one step of the game clock, 2 seconds by default, so a match
-takes 5 minutes. Everyone on the board, human or AI, does one thing per tick.
+A match is 30 **ticks**. A tick is one step of the game clock, 2 seconds by default, so a match
+takes 1 minute (`PT_MATCH_TICKS=150` gives the full 5-minute match). Everyone on the board, human or AI, does one thing per tick.
 
 Each machine carries **cards**. A card is one real, publicly listed software vulnerability (a
 CVE). Each card shows a **danger**: the predicted chance, from 0 to 100%, that this bug really gets

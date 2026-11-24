@@ -223,7 +223,7 @@ class Game:
 
     # ------------------------------------------------------------ lifecycle
     def _lobby_state(self) -> st.MatchState:
-        return st.new_match(self.world.current, seed=0, match_id="m-lobby", phase="lobby")
+        return st.new_match(self.world.current, seed=0, match_id="m-lobby", phase="lobby", tuning=config.match_tuning())
 
     async def start(self) -> None:
         self._watch_task = asyncio.create_task(self.world.watch())
@@ -328,7 +328,7 @@ class Game:
         if not (self.team.active or self.backup_offline()):
             return None
         from . import backup
-        return backup.BackupFlow(backup.BackupConfig.from_env(self.tick_seconds), analyst=_BruinAnalyst(self.tick_seconds))
+        return backup.BackupFlow(backup.BackupConfig.from_env(self.tick_seconds, config.match_ticks()), analyst=_BruinAnalyst(self.tick_seconds))
 
     def _start_flow(self, state: st.MatchState):
         try:
@@ -458,7 +458,7 @@ class Game:
         if self.state.phase == "running":
             return {"ok": False, "message": "a match is already running", "phase": "running"}
         seed = int(seed) if seed is not None else random.SystemRandom().randrange(1, 2**31)
-        tuning = config.TUNING
+        tuning = config.match_tuning()
         if self.intel is not None:     # TELEM_MAX_PER_MATCH caps paid searches per match (default 3)
             cap = int(config.env_float("TELEM_MAX_PER_MATCH", tuning.intel_max_per_match))
             cap = min(cap, self.intel.budget_left)   # TELEM_MAX_PER_PROCESS caps the whole process
@@ -611,7 +611,7 @@ class Game:
         idle_after = int(config.env_float("PT_IDLE_TICKS", 15))
         if idle_after <= 0:                      # PT_IDLE_TICKS=0 switches the cover off
             return
-        idle_after = max(3, idle_after)
+        idle_after = max(3, min(idle_after, state.ticks_total // 4))   # a short match covers sooner
         for pid in ("p1", "p2"):
             actor = state.actors.get(pid)
             if actor is None or pid in humans or pid in self.human_inputs:
