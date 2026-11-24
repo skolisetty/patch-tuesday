@@ -41,6 +41,11 @@ The machine value is the "×1", "×2" or "×3" next to the machine's name on the
 
 Each player has five actions. The keys are also in the "? How to play" card on the screen.
 
+Each player plays from their own browser: type a name and press **Play as P1** or **Play as P2**
+to take a seat, which locks that player to your browser. Both key columns below then work for your
+own player, so use whichever you like. You can also click a machine to walk there, and Space makes
+your robot jump.
+
 | Action | Player 1 | Player 2 | Takes | What it does | When to use it |
 |---|---|---|---|---|---|
 | Move | W A S D | arrow keys | 1 tick per step | Walk to the next machine. Hold the key to keep walking | To reach a breached machine or a valuable card |

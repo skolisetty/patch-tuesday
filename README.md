@@ -14,7 +14,9 @@ Attacks are abstract game moves. No exploit code, payloads, reference URLs or CV
 reach the game. A card shows only the vendor, the product, the kind of weakness, a severity rating,
 its danger and whether the bug is already known to be exploited.
 
-![Patch Tuesday mid-match. Top bar: both scores with their income per tick, the time left, and the data panel with the date the data is as of and the gate verdict. Centre: the 3D board of 20 machines, one of them breached (red). Right: the Agents tab, one card per AI agent with what it is doing and why. Bottom: the two player panels, each with a "next best move" line and the cards on its machine, and the events strip.](docs/img/game.png)
+![Patch Tuesday mid-match. Top bar: both scores with what is driving them, the time left, and the data panel with the date the data is as of and the gate verdict. Centre: the 3D network of 20 machines on four terraces, with the robots of both players and the AI agents; the back rows stand higher, so moving between rows is a jump. Right: the Coach box (team weakness: exposure, Hardener called in as backup) and one card per AI agent with what it is doing and why. Bottom: the two player panels, each with a "next best move" line, the cards on its machine and a name box to take the seat, then the events strip.](docs/img/game.png)
+
+*A real match on the day-0 data (2026-03-22). Coach found the team's weakest point, nobody answered in BAND, so it called in the Hardener specialist, the white robot at the front right, as a fourth Blue agent.*
 
 ## Sponsor tools: where each one sits
 
@@ -405,7 +407,7 @@ no server.
 
 | Who | Team | What they do |
 |---|---|---|
-| Player 1, Player 2 | Blue, human | Move, patch, monitor, isolate and restore from the keyboard |
+| Player 1, Player 2 | Blue, human | Each plays from their own browser: enter a name and take a seat, then move with the arrows or W A S D (or click a machine), Space to jump, and patch, monitor, isolate or restore |
 | Triage (`blue1`) | Blue, AI | Follows the pipeline's patch-priority list wherever it leads |
 | Patcher (`blue2`) | Blue, AI | Walks to the highest-value exposed machine and patches it clean |
 | Hunter (`blue3`) | Blue, AI | Monitors (revealing hidden attackers), restores, isolates under pressure; with Telem switched on, runs INTEL searches |
@@ -413,8 +415,9 @@ no server.
 | Patient (`red2`) | Red, AI | Scans first, waits for a good breach chance, prefers older cards and pivots from machines it holds |
 
 Triage and Patcher also break off to restore a breached machine when they are the nearest free
-defender. Every decision each of the seven makes is written to a log with a one-sentence reason,
-visible on screen.
+defender. Every decision each of them makes is written to a log with a one-sentence reason,
+visible on screen. If a player goes quiet for 30 seconds, Coach hands that player's robot to the
+Hardener routine until they press a key again.
 
 **Call for backup (optional, with [BAND](https://band.ai)).** A Coach agent watches the match and
 works out what the Blue team is weakest at. It says so in a BAND chat room, where the three blue

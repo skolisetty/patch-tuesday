@@ -66,8 +66,9 @@ CVE ids, development only).
 Logs and process ids of `start.ps1` go to `logs\run\`.
 
 In the browser: the briefing card explains the goal; **Start** on it begins a 150-tick match
-(5 minutes at 2 s a tick). Player 1 uses W A S D, E patch, Q monitor, R restore, F isolate. Player 2
-uses the arrows, Enter patch, right Shift monitor, `/` restore, `.` isolate. How to play is in
+(5 minutes at 2 s a tick). Each player uses their own browser: type a name and press **Play as P1**
+or **Play as P2** to take a seat, then move with the arrows or W A S D (or click a machine), Space
+to jump, E or Enter patch, Q monitor, R restore, F isolate. How to play is in
 [PLAY.md](PLAY.md); what each part of the screen means is in [UI_GUIDE.md](UI_GUIDE.md).
 
 **Advance week** runs `scripts/advance.py` through WSL in the background (about 20-30 s for one
