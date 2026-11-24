@@ -5,6 +5,7 @@ import { createScene } from './scene.js';
 import { createHud } from './hud.js';
 import { createInput } from './input.js';
 import { createVoice } from './voice.js';
+import { createSeats } from './seats.js';
 import { createNet, postControl, fetchLedger, fetchStatus } from './net.js';
 import { createMock } from './mock.js';
 
@@ -63,8 +64,26 @@ function machineName(id) {
   return (n && n.name) || `machine ${id}`;
 }
 
+// Seats: a browser can take Player 1 or 2 under a name; the server then accepts that player's
+// input from this browser only (web/src/seats.js).
+const seats = createSeats({
+  host: document.getElementById('hints'),
+  send: (msg) => !!link && link.send(msg),
+  onMine: (n) => setSeat(n),
+});
+
+// True when another browser holds this player's seat: say so instead of sending.
+function seatBlocked(player) {
+  if (!seats.takenByOther(player)) return false;
+  hud.setInputFeedback(player, `${seats.ownerName(player)} is playing Player ${player} from another browser.`, 'bad');
+  return true;
+}
+
 function onPick(nodeId, e) {
-  const player = e && (e.ctrlKey || e.altKey || e.metaKey) ? (seat === 1 ? 2 : 1) : seat;
+  let player = e && (e.ctrlKey || e.altKey || e.metaKey) ? (seat === 1 ? 2 : 1) : seat;
+  // The mouse follows the seat this browser holds, when it holds exactly one.
+  if (!seats.isMine(player) && seats.isMine(player === 1 ? 2 : 1) && seats.takenByOther(player)) player = player === 1 ? 2 : 1;
+  if (seatBlocked(player)) return;
   const res = input.walkTo(player, nodeId);
   if (res === 'idle') hud.setInputFeedback(player, 'The match is not running. Press Start.', 'note');
   else if (res === 'here') hud.setInputFeedback(player, `You are already on ${machineName(nodeId)}.`, 'note');
@@ -76,7 +95,10 @@ const scene = createScene(document.getElementById('scene'), document.getElementB
 });
 
 const input = createInput({
-  send: (msg) => !!link && link.send(msg),
+  send(msg) {
+    if (msg && msg.t === 'act' && seatBlocked(msg.player)) return true;   // handled: not ours to move
+    return !!link && link.send({ ...msg, token: seats.token });
+  },
   getPatchCve: (player) => hud.getPatchCve(player),
   onFeedback: (player, text, kind) => hud.setInputFeedback(player, text, kind),
   onDestination(player, nodeId, why) {
@@ -107,6 +129,7 @@ function onState(state) {
   lastState = state;
   scene.applyState(state);
   hud.applyState(state);
+  seats.onState(state);
   input.onState(state);
   voice.onState(state);
   // Presentation observes the completed update; it never changes the authoritative state.
@@ -125,6 +148,7 @@ function onMessage(msg) {
 function onStatus(status, text) {
   hud.setConn(status, text);
   if (status === 'open') {
+    seats.onOpen();
     // Fill the ledger with what happened before this page connected.
     // (The mock has no server: asking one would only show another game's rows or a proxy error.)
     // 1500 rows cover a whole match (150 ticks x 7 actors), so a page opened late still knows

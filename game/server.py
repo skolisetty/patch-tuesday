@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import random
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -62,6 +63,8 @@ class _BruinAnalyst:
 
 
 log = logging.getLogger("game.server")
+_SEAT_TOKEN = re.compile(r"[A-Za-z0-9-]+")
+_SEAT_NAME_BAD = re.compile(r"[^A-Za-z0-9 _.\-]")
 
 
 # Browsers send an Origin header on WebSocket handshakes and on cross-site POSTs, and apply no
@@ -192,6 +195,14 @@ class Game:
         self.rng = random.Random(0)
         self.pending_world = None
         self.human_inputs: dict[str, dict] = {}
+        self.seats: dict[int, dict | None] = {1: None, 2: None}     # see "seats" below
+        self.tokens_online: dict[str, int] = {}                     # seat token -> open sockets
+        # Cover for an inactive human (network trouble, away from the keyboard): after
+        # PT_IDLE_TICKS ticks without input Coach hands that robot to the Hardener routine; the
+        # player's next key or click takes it back at once.
+        self.last_input_tick: dict[str, int] = {"p1": 0, "p2": 0}
+        self.autopilot: dict[str, bool] = {"p1": False, "p2": False}
+        self.auto_rng = random.Random(7)
         self.unseen_ids: set[str] = set()    # ledger ids fogged in this match's broadcasts
         self.last_message: dict = st.snapshot(self.state, advancing=self.world.advancing)
         self.recent_events: list[dict] = []
@@ -279,10 +290,18 @@ class Game:
                 reveal = match.reveal_data(self.state, self.match_reveal)
             except Exception:
                 log.exception("could not build the end-of-match reveal")
-        return st.snapshot(self.state, rows, events,
-                           advancing=self.world.advancing or self.pending_world is not None,
-                           advance=adv, deltas=deltas, feedback=feedback, reveal=reveal,
-                           backup=self._backup_public())
+        try:
+            self._expire_seats()
+        except Exception:
+            log.exception("seat bookkeeping failed")
+        out = st.snapshot(self.state, rows, events,
+                          advancing=self.world.advancing or self.pending_world is not None,
+                          advance=adv, deltas=deltas, feedback=feedback, reveal=reveal,
+                          backup=self._backup_public())
+        seats = self.seats_public()
+        if any(seats.values()):                  # present only when a seat is taken or covered
+            out["seats"] = seats
+        return out
 
     async def publish(self, rows=None, events=None, deltas=None, feedback=None, advance=None) -> None:
         msg = self.snapshot(rows, events, deltas, feedback, advance)
@@ -445,6 +464,9 @@ class Game:
             cap = min(cap, self.intel.budget_left)   # TELEM_MAX_PER_PROCESS caps the whole process
             tuning = tuning.with_overrides(intel_enabled=True, intel_max_per_match=max(0, cap))
         self.state = st.new_match(self.world.current, seed=seed, match_id=_new_match_id(), tuning=tuning)
+        self.last_input_tick = {"p1": 0, "p2": 0}
+        self.autopilot = {"p1": False, "p2": False}
+        self._apply_seat_names()
         self.rng = random.Random(seed)
         self.pending_world = None
         self._advance_delivered()
@@ -465,6 +487,8 @@ class Game:
             except (asyncio.CancelledError, Exception):
                 pass
         self.state = self._lobby_state()
+        self.autopilot = {"p1": False, "p2": False}
+        self._apply_seat_names()
         self.pending_world = None
         self._advance_delivered()
         self.human_inputs = {}
@@ -474,6 +498,136 @@ class Game:
         await self.publish(events=[{"kind": "info", "text": "Back to the lobby."}])
         return {"ok": True, "phase": "lobby"}
 
+
+    # ------------------------------------------------------------ seats
+    # A browser may take a human player (p1 or p2) under a name. While a seat is taken, only the
+    # browser holding its secret token may act for that player; a free seat is open to anyone, as
+    # before. The token never leaves the server; the state message carries only the name and a
+    # short public id the owner's browser recognises. A seat frees itself SEAT_GRACE seconds after
+    # its browser's last socket closes.
+    SEAT_GRACE = 30.0
+
+    @staticmethod
+    def _seat_token(tok) -> str | None:
+        return tok if isinstance(tok, str) and 8 <= len(tok) <= 64 and _SEAT_TOKEN.fullmatch(tok) else None
+
+    @staticmethod
+    def _seat_name(name, player: int) -> str:
+        text = _SEAT_NAME_BAD.sub("", name if isinstance(name, str) else "")
+        text = " ".join(text.split())[:16].strip()
+        return text or f"Player {player}"
+
+    def socket_online(self, tok: str, delta: int) -> None:
+        n = self.tokens_online.get(tok, 0) + delta
+        if n > 0:
+            self.tokens_online[tok] = n
+        else:
+            self.tokens_online.pop(tok, None)
+
+    def _expire_seats(self) -> bool:
+        now, changed = time.monotonic(), False
+        for player, seat in self.seats.items():
+            if seat is None:
+                continue
+            if self.tokens_online.get(seat["token"], 0) > 0:
+                seat["last_seen"] = now
+            elif now - seat["last_seen"] > self.SEAT_GRACE:
+                self.seats[player] = None
+                changed = True
+        if changed:
+            self._apply_seat_names()
+        return changed
+
+    def _apply_seat_names(self) -> None:
+        for player in (1, 2):
+            actor = self.state.actors.get(f"p{player}")
+            if actor is not None:
+                seat = self.seats.get(player)
+                actor.name = (seat["name"] if seat else f"Player {player}") + (" (auto)" if self.autopilot.get(f"p{player}") else "")
+
+    def seat_claim(self, player, tok, name, pub) -> tuple[bool, str]:
+        tok = self._seat_token(tok)
+        if player not in (1, 2) or tok is None:
+            return False, ""
+        self._expire_seats()
+        cur = self.seats[player]
+        if cur is not None and cur["token"] != tok:
+            return False, f"Player {player} is taken by {cur['name']}."
+        clean = self._seat_name(name, player)
+        pub = pub if isinstance(pub, str) and 4 <= len(pub) <= 16 and pub.isalnum() else ""
+        self.seats[player] = {"token": tok, "name": clean, "pub": pub, "last_seen": time.monotonic()}
+        self._apply_seat_names()
+        return True, f"{clean} took Player {player}'s seat."
+
+    def seat_release(self, player, tok) -> tuple[bool, str]:
+        cur = self.seats.get(player) if player in (1, 2) else None
+        if cur is None or cur["token"] != self._seat_token(tok):
+            return False, ""
+        self.seats[player] = None
+        self._apply_seat_names()
+        return True, f"{cur['name']} left Player {player}'s seat."
+
+    def may_act(self, player: int, tok) -> bool:
+        seat = (getattr(self, "seats", None) or {}).get(player)
+        return seat is None or seat["token"] == tok
+
+    def seats_public(self) -> dict:
+        out = {}
+        for p, s in self.seats.items():
+            auto = bool(self.autopilot.get(f"p{p}"))
+            if s:
+                out[f"p{p}"] = {"name": s["name"], "id": s["pub"], "auto": auto}
+            else:
+                out[f"p{p}"] = {"name": f"Player {p}", "id": "", "auto": True} if auto else None
+        return out
+
+    def _player_label(self, pid: str) -> str:
+        seat = self.seats.get(int(pid[1]))
+        return seat["name"] if seat else f"Player {pid[1]}"
+
+    def _set_autopilot(self, pid: str, on: bool, state: st.MatchState) -> None:
+        if self.autopilot.get(pid) == on:
+            return
+        self.autopilot[pid] = on
+        self._apply_seat_names()
+        who = self._player_label(pid)
+        if on:
+            text = (f"{who} has been inactive, so Hardener is covering their robot. "
+                    f"{who}: press any of your keys to take it back.")
+        else:
+            text = f"{who} is back in control; Hardener has handed the robot over."
+        self.pending_events.append({"kind": "coach", "text": "Coach: " + text})
+        try:
+            if self.team.active:
+                from .backup import Say
+                self.team.submit(Say("coach", text, "humans", "decision"))
+        except Exception:
+            log.info("could not tell the BAND room about the cover")
+
+    def _cover_inactive(self, state: st.MatchState, humans: dict) -> None:
+        """Called once per tick with the humans' own actions: fill in for the inactive ones."""
+        if state.phase != "running" or not hasattr(self, "autopilot"):
+            return
+        idle_after = int(config.env_float("PT_IDLE_TICKS", 15))
+        if idle_after <= 0:                      # PT_IDLE_TICKS=0 switches the cover off
+            return
+        idle_after = max(3, idle_after)
+        for pid in ("p1", "p2"):
+            actor = state.actors.get(pid)
+            if actor is None or pid in humans or pid in self.human_inputs:
+                continue
+            if not self.autopilot[pid] and state.tick - self.last_input_tick[pid] >= idle_after:
+                self._set_autopilot(pid, True, state)
+            if not self.autopilot[pid] or actor.busy_ticks > 0:
+                continue
+            try:
+                from . import backup, policy
+                act = backup.hardener(policy.blue_view(state, pid), state.memory[pid], self.auto_rng)
+                if act is not None and act.kind in rules.BLUE_ACTIONS:
+                    humans[pid] = act
+            except Exception:
+                log.exception("the cover for %s failed this tick", pid)
+
     def human_input(self, msg: dict) -> bool:
         p = msg.get("player")
         if type(p) is int and p in (1, 2):          # bool and float are refused (int(True) == 1)
@@ -482,6 +636,13 @@ class Game:
             player = int(p)
         else:
             return False
+        if not self.may_act(player, msg.get("token")):
+            return False                            # the seat belongs to another browser
+        pid = f"p{player}"
+        if hasattr(self, "last_input_tick"):
+            self.last_input_tick[pid] = self.state.tick
+        if getattr(self, "autopilot", {}).get(pid):
+            self._set_autopilot(pid, False, self.state)         # the player is back
         a = msg.get("action")
         action = a.upper() if isinstance(a, str) and len(a) <= 10 else ""
         if action not in rules.BLUE_ACTIONS:
@@ -507,6 +668,10 @@ class Game:
             a = rules.human_action(state, m["player"], m["action"], m["dir"], m["cve"])
             if a is not None:
                 humans[aid] = a
+        try:
+            self._cover_inactive(state, humans)
+        except Exception:
+            log.exception("covering inactive players failed")
         return humans
 
     # ------------------------------------------------------------ Telem intel (off the tick)
@@ -686,6 +851,15 @@ async def ws_endpoint(ws: WebSocket):
         return
     if not await game.manager.connect(ws):
         return
+    sock_token = None
+
+    def bind(tok):
+        nonlocal sock_token
+        tok = game._seat_token(tok)
+        if tok and sock_token is None:
+            sock_token = tok
+            game.socket_online(tok, +1)
+
     try:
         await game.manager.send(ws, json.dumps(game.snapshot(), separators=(",", ":")))
         while True:
@@ -700,6 +874,17 @@ async def ws_endpoint(ws: WebSocket):
                 continue
             if msg.get("t") == "act":
                 game.human_input(msg)
+            elif msg.get("t") == "hello":
+                bind(msg.get("token"))
+            elif msg.get("t") == "seat":
+                bind(msg.get("token"))
+                p = msg.get("player")
+                if msg.get("cmd") == "release":
+                    ok, text = game.seat_release(p, msg.get("token"))
+                else:
+                    ok, text = game.seat_claim(p, msg.get("token"), msg.get("name"), msg.get("id"))
+                if text:
+                    await game.publish(events=[{"kind": "info", "text": text}])
             elif msg.get("t") == "control":
                 cmd = msg.get("cmd")
                 if cmd == "start":
@@ -715,4 +900,6 @@ async def ws_endpoint(ws: WebSocket):
     except Exception:
         pass
     finally:
+        if sock_token:
+            game.socket_online(sock_token, -1)
         game.manager.disconnect(ws)

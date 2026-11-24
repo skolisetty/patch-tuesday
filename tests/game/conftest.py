@@ -36,3 +36,10 @@ def serving(mock_dir):
 @pytest.fixture(scope="session")
 def next_serving(mock_dir):
     return world.load_serving(mock_dir / "next", "serving_mock")
+
+
+# Coach's cover for inactive players would change every server-driven test in which the humans
+# do nothing; tests that want it switch it on themselves.
+import os as _os
+
+_os.environ.setdefault("PT_IDLE_TICKS", "0")
