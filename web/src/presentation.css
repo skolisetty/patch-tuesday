@@ -404,3 +404,31 @@ button:disabled { opacity: 1; color: #526477; background: #e1e9ef; border-color:
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ---- "Call for backup" (Coach box, specialist card) and agent voices on the light theme ---- */
+#ledger-panel.is-crowded .agent { padding: 6px 10px 6px 48px; }
+#ledger-panel.is-crowded .agent-portrait { top: 4px; width: 36px; height: 40px; }
+.agent[data-actor='blue4']::before { content: '★'; color: #1f8a5a; border-color: #a9d4b9; background: linear-gradient(135deg, #e6f6ec, #dcf0e4); }
+.coach { background: linear-gradient(110deg, #f3fbf6, #e8f6ee); border-color: #a9d4b9; border-left-color: #2f9a63; color: #24415c; }
+.coach-slim { background: transparent; border-color: #cddde8; border-left-color: #7fbf9b; }
+.coach-tag { background: #2f9a63; color: #ffffff; }
+.coach-title { color: #1f3d57; }
+.coach-evidence li, .coach-rec { color: #2c4a63; }
+.coach-evidence li::before { background: #2f9a63; }
+.coach-players li { color: #526c85; }
+.coach-state, .coach-slim .coach-state { color: #1f3d57; }
+.coach.is-asked .coach-state { color: #8a5a00; }
+.coach.is-joined .coach-state { color: #1b7a4c; }
+.coach.is-declined .coach-state, .coach.is-unavailable .coach-state { color: #61778b; }
+.coach-toggle { color: #3d6a8a; border-color: #b9d0dd; background: #ffffff; }
+.coach-toggle:hover { color: #1f3d57; border-color: #7fa9bf; }
+.coach-bar { background: #d7e7ee; }
+.coach-bar i { background: #2f9a63; }
+.agent-backup, .agent-backup.is-new { background: linear-gradient(110deg, #eefaf2, #e3f4ea); border-color: #a9d4b9; }
+.agent-badge { background: #2f9a63; color: #ffffff; }
+.tk-coach, .tk-backup { background: #e8f6ee; border-color: #a9d4b9; color: #1f3d57; }
+.voice-btn { color: #3d6a8a; }
+.voice-btn.is-on { color: #ffffff; background: #2f9a63; border-color: #2f9a63; }
+.hint::after { background: transparent; color: #61778b; }
+.hint.is-seat::after { color: #147495; }
+.hint-p2.is-seat::after { color: #8a5a00; }

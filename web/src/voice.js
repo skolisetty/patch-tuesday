@@ -84,7 +84,7 @@ export function createVoice({ button } = {}) {
 
   function paint() {
     if (!button) return;
-    button.textContent = on ? 'Voices: on' : 'Voices: off';
+    button.textContent = on ? 'Agent voices: on' : 'Agent voices: off';
     button.setAttribute('aria-pressed', String(on));
     button.classList.toggle('is-on', on);
     button.hidden = !synth;
