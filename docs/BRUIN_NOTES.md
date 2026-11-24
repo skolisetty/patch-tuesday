@@ -118,7 +118,7 @@ The existing table is left untouched and its checks still run against it. Gotcha
 
 **`query()`.** Reads a table written by an earlier SQL asset in the same run (`raw.world_clock` showed the current run id). `DATE` columns arrive as `datetime64[us]`, strings as pandas `str` dtype (pandas 3.1.1). Cast before comparing with a date string.
 
-**Working directory and environment.** `os.getcwd()` is the repo root (`/home/kolis/bruin-smoke`), even when `bruin` was started from `pipelines/smoke`. `__file__` is the real asset path. `materialize()` receives no kwargs. Environment seen in a full-refresh run:
+**Working directory and environment.** `os.getcwd()` is the repo root (`/home/<you>/bruin-smoke`), even when `bruin` was started from `pipelines/smoke`. `__file__` is the real asset path. `materialize()` receives no kwargs. Environment seen in a full-refresh run:
 
 ```
 BRUIN_ASSET='py.py_table'            BRUIN_THIS='py.py_table'
@@ -132,7 +132,7 @@ BRUIN_EXECUTION_DATE='2026-11-23'    BRUIN_EXECUTION_DATETIME='2026-11-23T08:36:
 BRUIN_EXECUTION_TIMESTAMP='2026-11-23T08:36:21.317266Z'
 BRUIN_FULL_REFRESH='1'               (empty string '' on a normal run)
 BRUIN_SCHEMA_PREFIX=''  BRUIN_VARS='{}'  BRUIN_VARS_SCHEMA='{}'  PYTHONUNBUFFERED='1'
-duckdb-default='{"name": ..., "path": "/home/kolis/bruin-smoke/smoke.duckdb"}'   (JSON, absolute path)
+duckdb-default='{"name": ..., "path": "/home/<you>/bruin-smoke/smoke.duckdb"}'   (JSON, absolute path)
 ```
 
 `BRUIN_RUN_ID` has the form `YYYY_MM_DD_HH_MM_SS` in local time; the execution timestamps are UTC.
@@ -432,7 +432,7 @@ This ran straight after the failed gate, so it is the working "rebuild serving i
 - Embedded engine: `select version()` -> `v1.5.2` (first use prints `Installing the DuckDB ADBC driver v1.5.2...`). Python assets get pip `duckdb` 2.0.1 through `bruin-sdk[duckdb]`; it read the 1.5.2 file, wrote a table into it, and Bruin kept reading the file afterwards.
 - No run active: a separate process opened the file with `duckdb.connect(path, read_only=True)` and read it; two read-only processes at once also worked.
 - While a read-only reader holds the file, `bruin query` fails (Bruin opens read-write): `IO Error: Could not set lock on file ".../smoke.duckdb": Conflicting lock is held in /usr/bin/python3.12 (PID ...)`.
-- During a run, while a SQL asset is executing, both a read-only open and `bruin query` fail: `IO Error: Could not set lock on file ".../smoke.duckdb": Conflicting lock is held in /home/kolis/.local/bin/bruin (PID ...)`. The run itself was not disturbed.
+- During a run, while a SQL asset is executing, both a read-only open and `bruin query` fail: `IO Error: Could not set lock on file ".../smoke.duckdb": Conflicting lock is held in /home/<you>/.local/bin/bruin (PID ...)`. The run itself was not disturbed.
 - During a run, while only a Python asset is executing, a read-only open from outside succeeded: Bruin releases the file around Python assets. So the lock is not held for the whole run; never rely on that.
 - Ad hoc check syntax: `bruin query --connection duckdb-default --query "select ..."` (add `--environment <env>` for another environment; `-o json|csv` available). It prints upper-cased headers and shows `DATE` values as `2026-03-22T00:00:00Z`; that is display only, the stored type is `DATE`. `DESCRIBE schema.table` works.
 - Run logs are written to `logs/runs/<pipeline>/<run_id>.json` under the repo root, one file per run, so git-ignore `logs/`.

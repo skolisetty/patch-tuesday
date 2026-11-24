@@ -56,6 +56,7 @@ CVE ids, development only).
 | Start server + web client | `scripts\start.ps1` (prints the URL: http://localhost:5173) |
 | Faster rehearsal ticks | `scripts\start.ps1 -TickSeconds 1` (sets `PT_TICK_SECONDS`) |
 | With BAND / Telem | `scripts\start.ps1 -Band -Telem` (sets `BAND_ENABLED=1`, `TELEM_ENABLED=1`) |
+| Set up Call for backup (once) | `.venv\Scripts\python scripts\band_setup.py`, then `scripts\start.ps1 -Band`. See [BAND.md](BAND.md) |
 | Stop both | `scripts\stop.ps1` (refuses while an advance runs; `-Force` stops it anyway) |
 | Server only | `.venv\Scripts\python -m uvicorn game.server:app --port 8000 --ws-max-size 4096` |
 | Headless balance check | `.venv\Scripts\python -m game.simulate --serving serving --seeds 30 --seed 1 --fast --drop-tick -1` |
@@ -154,6 +155,7 @@ All read from `.env` or the environment (secrets stay in `.env`):
 | `LLM_REASONS=0` | Template reasons only, even when `LLM_API_KEY` is set |
 | `BAND_ENABLED=1` | Mirror highlights into the BAND room as events (needs a remote **agent** key, see below) |
 | `BAND_CHAT_ID` | The room to post to; otherwise the agent's room whose title contains "Patch Tuesday" |
+| `BAND_BACKUP=0` | Turns off Call for backup (the Coach agent and the specialist it can call in through BAND) while BAND stays on. Its other switches (`BAND_BACKUP_TICK`, `BAND_BACKUP_WAIT_TICKS`, `BAND_BACKUP_AUTO`, `BAND_TEAM_MAX_PER_HOUR`, `BAND_TEAM_MAX_POSTS`) and its keys are listed in [BAND.md](BAND.md#switches) |
 | `TELEM_ENABLED=1` | The blue Hunter may spend a tick on INTEL: one Telem search for a board CVE, bounded to the world week |
 | `TELEM_MAX_PER_MATCH` | Cap on Telem searches per match (default 3); `TELEM_PROVIDERS` (default `brave`) |
 | `TELEM_MAX_PER_PROCESS` | Cap on Telem searches for the whole server process (default 10); then INTEL answers "budget spent" |
@@ -166,6 +168,12 @@ Page options such as `?mock=1` (the screen on built-in fake data, no server) are
 [UI_GUIDE.md](UI_GUIDE.md).
 
 ### BAND setup
+
+BAND is used in two separate ways. **Call for backup** is the main one: a Coach agent analyses the
+Blue team's weakness in a BAND room, a human approves there, and a specialist agent joins the room
+and the board. It has its own page with setup, what to type, limits and troubleshooting:
+[BAND.md](BAND.md). The rest of this section is about the older, one-way **highlights mirror**,
+which uses its own agent and its own room and is unchanged.
 
 Once, in https://app.band.ai: **Agents** > **Connect remote agent**, name it `Patch Tuesday`,
 **Connect Agent**, and copy the `band_a_...` key shown once into `.env` as `BAND_API_KEY` (a
@@ -223,5 +231,6 @@ tick (the player panel shows "Queued: … runs when the current action finishes.
 | Advance returns `ok: false` with check names | A check other than the gate failed. `serving/` keeps the last good week. Read the newest file in `logs/advance/` |
 | Advance pressed late in a match and no cards drop | No drop happens in the last 25 ticks of a match; the new week is dealt in the next match |
 | A teammate's browser shows no live connection, or buttons answer 403 | Their address is not in `PT_ALLOWED_ORIGINS`. See [Share with teammates](#3-share-with-teammates-ngrok) |
-| BAND posts nothing | A `band_u_...` user key was used, or the mirror switched itself off after HTTP 401, 403 or 429. Use a `band_a_...` agent key and restart |
+| Coach does not appear, or does not react in the BAND room | See the troubleshooting table in [BAND.md](BAND.md#troubleshooting) |
+| The BAND highlights mirror posts nothing | A `band_u_...` user key was used, or the mirror switched itself off after HTTP 401, 403 or 429. Use a `band_a_...` agent key and restart |
 | `stop.ps1` refuses | An advance is running. Wait for it, or `scripts\stop.ps1 -Force` |

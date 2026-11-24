@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
-from . import band, config, intel, match, rules
+from . import band, bandteam, config, intel, match, rules
 from . import state as st
 from .ledger import Ledger
 from .reasons import ReasonEngine
@@ -164,6 +164,11 @@ class Game:
         self.pending_events: list[dict] = []   # late events (intel) published with the next tick
         self.match_reveal: dict[str, dict] = {}
         self.band = band.BandMirror(flag=False)  # replaced in start()
+        # "Call for backup": the BAND transport (replaced in start()), this match's flow
+        # (game/backup.py BackupFlow, None while the feature is off) and the match's ledger rows.
+        self.team = bandteam.BandTeam(flag=False)
+        self.flow = None
+        self.match_rows: list[dict] = []
         self.intel: intel.IntelClient | None = None
         self._loop_task: asyncio.Task | None = None
         self._watch_task: asyncio.Task | None = None
@@ -181,6 +186,8 @@ class Game:
         self.band = band.BandMirror()
         await self.band.start()
         band.set_default(self.band)
+        self.team = bandteam.BandTeam()
+        await self.team.start()
         if intel.enabled():
             self.intel = intel.IntelClient()
 
@@ -197,6 +204,7 @@ class Game:
                     pass
         await self.band.stop()
         band.set_default(None)
+        await self.team.stop()
         if self.intel is not None:
             await self.intel.aclose()
         self.ledger.close()
@@ -239,7 +247,8 @@ class Game:
                 log.exception("could not build the end-of-match reveal")
         return st.snapshot(self.state, rows, events,
                            advancing=self.world.advancing or self.pending_world is not None,
-                           advance=adv, deltas=deltas, feedback=feedback, reveal=reveal)
+                           advance=adv, deltas=deltas, feedback=feedback, reveal=reveal,
+                           backup=self._backup_public())
 
     async def publish(self, rows=None, events=None, deltas=None, feedback=None, advance=None) -> None:
         msg = self.snapshot(rows, events, deltas, feedback, advance)
@@ -253,6 +262,86 @@ class Game:
             for e in events:
                 self.band.submit(e["kind"], e["text"])     # non-blocking; drops when backed up
         await self.manager.broadcast(json.dumps(msg, separators=(",", ":")))
+
+    # ------------------------------------------------------------ "Call for backup"
+    def backup_offline(self) -> bool:
+        """PT_BACKUP_OFFLINE=1 (rehearsals and tests): run the Coach flow with no BAND at all.
+        Nobody can reply, so Coach decides by itself when the answer window closes."""
+        return config.env_flag("PT_BACKUP_OFFLINE") and config.env("BAND_BACKUP") != "0"
+
+    def _new_flow(self):
+        """A fresh BackupFlow for the next match, or None while the feature is off (the BAND
+        side is not active: flag, keys or room missing, or it switched itself off)."""
+        if not (self.team.active or self.backup_offline()):
+            return None
+        from . import backup
+        return backup.BackupFlow(backup.BackupConfig.from_env(self.tick_seconds))
+
+    def _start_flow(self, state: st.MatchState):
+        try:
+            flow = self._new_flow()
+            if flow is None:
+                return None
+            flow.reset(state)
+        except Exception:
+            log.exception('"Call for backup" could not start; this match runs without it')
+            state.backup = None
+            return None
+        self.team.match_started()          # forget older replies; last match's specialist leaves the room
+        self.team.set_listening(True)
+        return flow
+
+    def _backup_public(self) -> dict | None:
+        """`state.backup` for the state message; None (key absent) while the feature is off."""
+        if self.flow is None:
+            return None
+        try:
+            return self.flow.public(self.state)
+        except Exception:
+            return None
+
+    def _backup_tick(self, state: st.MatchState, rows: list[dict]) -> list[dict]:
+        """Once per tick, after the rules: hand the humans' BAND replies and this tick's rows to
+        the flow, queue what it says for the BAND room, and return its "coach"/"backup" events.
+        Memory only: the BAND side never blocks and never raises. A failing flow is dropped for
+        the rest of the match; the match itself goes on."""
+        flow = self.flow
+        if flow is None:
+            return []
+        self.match_rows.extend(rows)
+        says: list = []
+        try:
+            if not self.team.active and not self.backup_offline() and flow.status != "unavailable":
+                # BAND went away mid-match (limit reached, Coach stopped, network): nothing more is
+                # asked or decided; a specialist that already joined keeps playing.
+                flow.set_unavailable(self.team.disabled_reason or "BAND is not available")
+            for text, by_name in self.team.drain_inbox():
+                says += flow.on_human(state, text, by_name) or []
+            says += flow.on_tick(state, rows, self.match_rows) or []
+            if state.phase == "ended":
+                says += flow.on_match_end(state, self.match_rows) or []
+        except Exception:
+            log.exception('"Call for backup" failed; it is off for the rest of this match')
+            self.flow = None
+            if isinstance(state.backup, dict) and state.backup.get("status") in ("watching", "analysing", "asked"):
+                state.backup = {**state.backup, "status": "unavailable"}
+        self.team.submit_all(says)
+        self.team.set_listening(self.flow is not None and state.phase == "running")
+        return st.take_events(state)
+
+    def backup_status(self) -> dict:
+        """For /api/status: the BAND side's counters plus where the flow stands. No secrets."""
+        status = self.team.status()
+        flow_status = None
+        if self.flow is not None:
+            try:
+                flow_status = str(self.flow.status)
+            except Exception:
+                flow_status = None
+        offline = self.backup_offline() and not status["active"]
+        if offline:
+            status["disabled_reason"] = "PT_BACKUP_OFFLINE=1: the flow runs without BAND"
+        return {**status, "flow": flow_status, "offline": offline}
 
     async def _on_reason(self, ledger_id: str, text: str, model: str | None, latency: int | None) -> None:
         try:
@@ -329,6 +418,8 @@ class Game:
         self.match_reveal = self._reveal_of(self.world.current)   # grows with each week dropped mid-match
         self.human_inputs = {}
         self.unseen_ids = set()
+        self.match_rows = []
+        self.flow = self._start_flow(self.state)
         self._loop_task = asyncio.get_running_loop().create_task(self._run_match())
         return {"ok": True, "match_id": self.state.match_id, "seed": seed, "phase": "running"}
 
@@ -343,6 +434,9 @@ class Game:
         self.pending_world = None
         self._advance_delivered()
         self.human_inputs = {}
+        self.flow = None
+        self.match_rows = []
+        self.team.match_reset()            # stop listening; the specialist leaves the BAND room
         await self.publish(events=[{"kind": "info", "text": "Back to the lobby."}])
         return {"ok": True, "phase": "lobby"}
 
@@ -433,7 +527,7 @@ class Game:
                     if r["action"] == "INTEL" and r["outcome"] == "requested" and self.intel is not None:
                         self._spawn(self._run_intel(r, dict(state.world), state.match_id))
                 late, self.pending_events = self.pending_events, []
-                events = late + list(res.events)
+                events = late + list(res.events) + self._backup_tick(state, res.rows)
                 if pending is not None:
                     self.match_reveal.update(self._reveal_of(pending))
                 if state.phase == "ended":
@@ -450,6 +544,7 @@ class Game:
         except Exception:
             log.exception("tick loop crashed")
             state.phase = "ended"
+            self.team.set_listening(False)
             await self.publish(events=[{"kind": "info", "text": "The match stopped on a server error."}])
 
 
@@ -472,6 +567,10 @@ async def lifespan(app: FastAPI):
              "on" if game.reasons.enabled else "off (templates)",
              "on" if game.band.active else ("off: " + game.band.disabled_reason if game.band.disabled_reason else "off"),
              "on" if game.intel is not None else "off")
+    team = game.backup_status()
+    log.info('"Call for backup" %s', "on" if team["active"] else
+             "on without BAND (PT_BACKUP_OFFLINE)" if team["offline"] else
+             "off" + (": " + team["disabled_reason"] if team["disabled_reason"] else ""))
     try:
         yield
     finally:
@@ -514,6 +613,7 @@ async def api_status():
             "llm": {"enabled": game.reasons.enabled, "model": game.reasons.model if game.reasons.enabled else None,
                     **game.reasons.stats},
             "band": game.band.status(),
+            "band_team": game.backup_status(),
             "telem": {"enabled": game.intel is not None, "searches": game.intel.calls if game.intel else 0},
             "clients": len(game.manager.active)}
 

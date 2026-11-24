@@ -200,3 +200,97 @@ is [BRUIN_NOTES.md](BRUIN_NOTES.md).
   rebuild serving in EPSS mode (that is `advance.py`'s job), so use the backfill to rehearse, then reset.
 - `serving/*.json` is not git-ignored by the root `.gitignore`. The files are generated, and the game
   falls back to `serving_mock/` when `serving/world.json` is absent.
+
+## Coach pipeline
+
+A second, much smaller use of Bruin: the Coach's analysis for "Call for backup"
+([BAND.md](BAND.md)). At a checkpoint of a match the game hands the pipeline two files, the match's
+ledger rows so far and the board the Blue team sees, and gets back one JSON file of checked figures:
+the evidence for the three weaknesses (slow response, exposure, blind spots) and what each blue
+agent and each player did. Coach's sentences in the BAND room are built from that file. The full
+field list, with every definition, is in [`pipelines/coach/README.md`](../pipelines/coach/README.md).
+
+```mermaid
+flowchart LR
+  G["Game server<br/>checkpoint, tick 40"] -- "ledger.jsonl + state.json" --> R["scripts/coach.py"]
+  R --> B["bruin run pipelines/coach<br/>(WSL, own DuckDB file)"]
+  subgraph P["coaching.*"]
+    direction LR
+    L["load<br/>ledger, board, cards"] --> D["derive<br/>breach spans, monitoring,<br/>sightings, patches"]
+    D --> K{"reconcile with<br/>the scoreboard"}
+    K -- pass --> M["metrics<br/>team, agents, players"] --> X["export<br/>metrics.json"]
+  end
+  B --> P
+  X --> G
+  K -. "fail: no file" .-> F["game uses its<br/>local figures"]
+```
+
+### Assets (16 in `pipelines/coach`, schema `coaching`)
+
+| Layer | Asset | Kind / strategy | Purpose |
+|---|---|---|---|
+| load | `coaching.match_state` | SQL, create+replace | One row: match, tick, scores with their breakdown, game constants, the run id |
+| load | `coaching.machines` | SQL, create+replace | The 20 machines: value, state, monitored now |
+| load | `coaching.cards` | SQL, create+replace | Every card on the board: danger, known-exploited flag, priority, patch state |
+| load | `coaching.ledger_rows` | SQL, create+replace | The ledger snapshot (`read_json`, explicit columns). The only table with the attackers' rows; never exported |
+| derive | `coaching.monitor_windows` | SQL, create+replace | When each machine was monitored and thanks to whom (MONITOR actions, the watch after a restore) |
+| derive | `coaching.isolation_ticks` | SQL, create+replace | One row per machine per isolated tick |
+| derive | `coaching.patches` | SQL, create+replace | Every finished patch: worth (machine value x danger) and points earned |
+| derive | `coaching.breach_spans` | SQL, create+replace | Every breach: machine, tick breached, tick restored or still open, length, ticks Red was paid |
+| derive | `coaching.attacker_sightings` | SQL, create+replace | Per attacker and tick: in sight or not, newly detected or not (no position kept unless detected) |
+| metrics | `coaching.score_reconciliation` | SQL, create+replace | **The gate of this pipeline** (blocking custom checks) |
+| metrics | `coaching.team_metrics` | SQL, create+replace | One row: the evidence figures of the three weaknesses |
+| metrics | `coaching.blue_activity` | SQL, create+replace | Five rows: what blue1-3, p1 and p2 did |
+| metrics | `coaching.agent_metrics` | SQL, create+replace | blue1, blue2, blue3 |
+| metrics | `coaching.player_metrics` | SQL, create+replace | p1, p2 |
+| out | `coaching.summary` | SQL, create+replace | One-row summary of the analysis |
+| out | `coaching.export_metrics` | SQL, single COPY | `data/coach/current/metrics.json`, last |
+
+### Checks
+
+A run executes 261 quality checks. The one that matters most is the reconciliation: Red's income is
+rebuilt from the ledger and the machine values alone (machine value for every tick a machine was
+breached and not isolated, plus 5 for each first breach) and must equal the scoreboard's own
+breakdown within 0.05; the same is done for Blue's patches, restores and isolation cost. If the
+breach spans were wrong, or the ledger snapshot incomplete, the totals would not match, every
+downstream asset would be skipped, no metrics file would be written, and the game would fall back
+to its local figures. Other blocking checks: one match id, the ledger and the board are the same
+match, no ledger row at or after the board's tick, one row per actor per tick, 20 machines, breach
+spans that do not overlap and agree with the board, shares within 0 and 1, counts not negative,
+three agents, two players, one summary row. Fog of war has its own check: a machine may appear next
+to an attacker only on the tick that attacker was detected there.
+
+Verified three ways: three fixtures whose 94 figures each were worked out by hand
+(`tests/pipeline/coach_fixtures/NOTES.md`, `python tests/pipeline/test_coach.py`); freshly
+simulated matches compared with the engine's own bookkeeping
+(`python tests/pipeline/coach_sim_check.py`); and a real match cut from a ledger file
+(`python tests/pipeline/coach_real_cut.py --ledger ledger/ledger.jsonl`).
+
+### How it is run
+
+`game/coach_bruin.py` starts `python scripts/coach.py --match <id> --ledger <jsonl> --state <json>
+--out <json>` in a background thread when the checkpoint fires, so the tick loop never waits.
+`scripts/coach.py` (standard library only) copies the inputs to `data/coach/<match>-<tick>/` and to
+the fixed folder `data/coach/current/` that the SQL reads, holds `data/.coach.lock`, runs
+`bruin run --workers 1 pipelines/coach/pipeline.yml` through WSL and prints one JSON line:
+`{"ok", "metrics_path", "pipeline_run_id", "checks_passed", "checks_failed", "failed_checks",
+"seconds", "message"}`. A run takes 2 to 3 seconds here. If it fails, is switched off
+(`PT_COACH_BRUIN=0`) or takes longer than `PT_COACH_BRUIN_TIMEOUT` (20 s), the game analyses locally.
+
+### Its own DuckDB file
+
+The coach pipeline uses the connection `duckdb-coach` (`.bruin.yml.example`), a separate file from
+the weekly pipeline's `duckdb-default`. DuckDB allows one writer per file, and Bruin holds the file
+while a SQL asset runs: on a shared file, an analysis asked for in the middle of "Advance week"
+would fail with a lock error, or make the advance fail. With two files the two pipelines never
+meet, the coach run needs no part in `data/.advance.lock`, and nothing it does can touch the
+weekly tables.
+
+Two things found while building it (Bruin v0.11.831, WSL):
+
+- The schema is `coaching` because the file is `coach.duckdb`: DuckDB names the catalog after the
+  file, and a schema with the same name fails with "Ambiguous reference to catalog or schema".
+- WSL appends the Windows `PATH` (68 folders under `/mnt/c` here) to the Linux one, and every
+  `bruin` start then costs about 1.8 s before it does anything (`bruin --help`: 1.8 s, against
+  0.08 s with a plain Linux `PATH`). `scripts/coach.py` sets a short `PATH`, which brings a whole
+  run from about 5 s to about 2 s. `scripts/advance.py` does not do this.

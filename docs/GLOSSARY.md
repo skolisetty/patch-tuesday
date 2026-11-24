@@ -22,7 +22,7 @@ code, logs or file names are listed with an arrow (→) to the name used now.
 | match | One game: 150 ticks, 5 minutes |
 | Blue team | The defenders: Player 1, Player 2 and the AI agents Triage, Patcher and Hunter |
 | Red team | The attackers: the AI agents Opportunist and Patient. Hidden unless revealed |
-| agent | A character played by the computer. There are five |
+| agent | A character played by the computer. There are five on the board, and a sixth when a specialist is called in |
 | LAST SEEN | Tag on a faint attacker figure: where a hidden attacker was last revealed |
 | Advance week | Button. Replays the next real week of data through the pipeline while the match runs |
 | drop | The new week's cards landing on machines after an advance (at most 12) |
@@ -30,6 +30,22 @@ code, logs or file names are listed with an arrow (→) to the name used now.
 | decision log | The on-screen list of every move every character made, each with a one-sentence reason. In code and files: ledger |
 | debrief | The end-of-match screen: the verdict, where each team's points came from, and "what really happened" |
 | what really happened | The reveal at the end of a match: which cards on the board really became known exploited within 91 days of the board's date |
+
+## Call for backup (BAND)
+
+Only when the game runs with BAND on. The full page is [BAND.md](BAND.md).
+
+| Term | Meaning |
+|---|---|
+| BAND | A chat service where AI agents and people talk in shared rooms. The game uses it for Call for backup |
+| Call for backup | The feature: Coach finds the Blue team's weakness, a human approves in BAND, and a specialist joins the team |
+| room | A BAND chat room. Here: "Patch Tuesday - Blue team", where Coach, the blue agents and the humans talk |
+| mention | Naming someone in a BAND message with `@`, for example `@Coach yes`. BAND delivers a message to an agent only when the message mentions it |
+| Coach | The agent that watches the match, measures the team's weaknesses, and asks in the room whether to call in a specialist. It does not play on the board |
+| weakness | What Coach measures: slow response, exposure or blind spots. It picks the worst of the three |
+| checkpoint | The moment Coach analyses the match: tick 40 by default, once per match |
+| specialist | The extra blue AI agent Coach can call in: Responder (restores), Hardener (patches) or Sentinel (monitors). At most one per match. In code: `blue4` |
+| backup | The specialist once it has joined. Marked BACKUP on the Agents tab |
 
 ## The data
 

@@ -121,6 +121,20 @@ If you only ever do what the NEXT line says, you are playing well.
    days after the board's date, and whether you patched them in time. Often there are none. Real
    exploitation is rare, and that is why the order you patch in matters.
 
+## Calling for backup (only with BAND on)
+
+When the game was started with BAND, a **Coach** agent watches the Blue team. At tick 40 it posts
+in the team's BAND chat room what the team is weakest at (slow response, exposure or blind spots)
+with numbers from your match, and recommends one **specialist**. Reply in the room with
+`@Coach yes`, with another specialist's name, or with `@Coach no`. On yes, the specialist joins the
+room and walks onto the board at JUMP-01 as a fourth blue AI agent, marked BACKUP on the Agents
+tab. It plays by the same rules as everyone else. The debrief then shows what changed after it
+joined.
+
+On the game screen the Coach box at the top of the right panel shows the analysis and how many
+ticks you have left to answer. You can ask for the analysis earlier with `@Coach analyze`. All of
+it is in [BAND.md](BAND.md).
+
 ## Where the danger comes from
 
 A data pipeline computes the danger of every card from real public data, one real week at a time.
@@ -143,4 +157,5 @@ EPSS. More in [HOW_IT_WORKS.md](HOW_IT_WORKS.md) and [MODEL_AND_GATE.md](MODEL_A
 | Why did my key do nothing? | A patch or restore was still running. The key was queued and runs when it finishes |
 | Why does a card show "KEV"? | It is on CISA's list of bugs that attackers have really used. Its breach chance is higher |
 | Why does a card show "NEW"? | It arrived with this week's data. Opportunist goes after these first |
+| Who is the extra blue character marked BACKUP? | A specialist that Coach called in through BAND after a human approved it. See [BAND.md](BAND.md) |
 | Can I pause? | No. Reset stops the match and goes back to the lobby |

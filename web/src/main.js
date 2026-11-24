@@ -2,6 +2,7 @@ import './style.css';
 import { createScene } from './scene.js';
 import { createHud } from './hud.js';
 import { createInput } from './input.js';
+import { createVoice } from './voice.js';
 import { createNet, postControl, fetchLedger, fetchStatus } from './net.js';
 import { createMock } from './mock.js';
 
@@ -84,6 +85,8 @@ const input = createInput({
 });
 setSeat(seat);
 
+const voice = createVoice({ button: document.getElementById('btn-voice') });
+
 function onState(state) {
   const now = performance.now();
   // Measure the real tick length so movement lasts exactly one tick.
@@ -102,6 +105,7 @@ function onState(state) {
   scene.applyState(state);
   hud.applyState(state);
   input.onState(state);
+  voice.onState(state);
 }
 
 function onMessage(msg) {
@@ -135,6 +139,15 @@ function onStatus(status, text) {
   }
 }
 
+// Mock only: ?backup=1 plays "Call for backup". backup=responder|hardener|sentinel fixes Coach's
+// pick; backupreply=yes|no|none|standdown|unavailable|<specialist> is the pretend answer in BAND
+// (default yes); backupwait=N is how many ticks that answer takes.
+function mockBackup() {
+  const v = params.get('backup');
+  if (!v || v === '0') return null;
+  return { role: v, reply: params.get('backupreply') || 'yes', replyAfter: Number(params.get('backupwait')) || undefined };
+}
+
 if (MOCK) {
   const tick = Number(params.get('tick'));
   const ticks = Number(params.get('ticks'));
@@ -146,6 +159,7 @@ if (MOCK) {
     ticksTotal: ticks >= 5 ? Math.floor(ticks) : 150,
     autostart: params.get('autostart') !== '0',
     seed: Number(params.get('seed')) || undefined,
+    backup: mockBackup(),
   });
 } else {
   link = createNet({ onMessage, onStatus });

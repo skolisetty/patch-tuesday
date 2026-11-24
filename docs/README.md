@@ -10,6 +10,7 @@ Start with the front page, [../README.md](../README.md). Then pick the path that
 | **Curious** how a real CVE ends up as a card on a machine | [HOW_IT_WORKS.md](HOW_IT_WORKS.md) → [GLOSSARY.md](GLOSSARY.md) |
 | **A presenter or a judge** | [DEMO.md](DEMO.md) (2-minute script and the criteria sheet) → [MODEL_AND_GATE.md](MODEL_AND_GATE.md) for the result and its caveats |
 | **Running it** on your machine or sharing it | [RUNNING.md](RUNNING.md) |
+| **Interested in BAND**: agents talking in a room, a human approving, a new agent joining the team | [BAND.md](BAND.md) → the BAND beat in [DEMO.md](DEMO.md#the-band-beat-call-for-backup-about-60-seconds) |
 | **A data engineer** interested in the Bruin pipeline | [PIPELINE.md](PIPELINE.md) → [MODEL_AND_GATE.md](MODEL_AND_GATE.md) → [BRUIN_NOTES.md](BRUIN_NOTES.md) |
 | **An ML or security reader** checking the claims | [MODEL_AND_GATE.md](MODEL_AND_GATE.md) → [DATA_SOURCES.md](DATA_SOURCES.md) |
 | **A developer** changing the code | [CONTRACTS.md](CONTRACTS.md) → [HOW_IT_WORKS.md](HOW_IT_WORKS.md) → [RUNNING.md](RUNNING.md) (tests) |
@@ -22,7 +23,8 @@ Start with the front page, [../README.md](../README.md). Then pick the path that
 | [PLAY.md](PLAY.md) | What is the goal, how do points move, what does each action do, what do I do first |
 | [UI_GUIDE.md](UI_GUIDE.md) | What does this panel, colour or icon mean |
 | [HOW_IT_WORKS.md](HOW_IT_WORKS.md) | What happens each tick, each match and each week; one real CVE followed end to end |
-| [DEMO.md](DEMO.md) | How do I show it in 2 minutes; where is each hackathon criterion |
+| [DEMO.md](DEMO.md) | How do I show it in 2 minutes; the 60-second BAND beat; where is each hackathon criterion |
+| [BAND.md](BAND.md) | Call for backup: how a Coach agent finds the team's weakness and, with a human's approval in a BAND room, calls in a specialist. Setup, what to type, limits, troubleshooting |
 | [RUNNING.md](RUNNING.md) | Setup, daily commands, sharing with teammates (ngrok), switches, troubleshooting |
 | [PIPELINE.md](PIPELINE.md) | How Bruin is used: layers, the 27 assets, one simulated week, the Bruin feature map |
 | [MODEL_AND_GATE.md](MODEL_AND_GATE.md) | The model, the gate, the 12-week results, proof the gate blocks, the leakage audit, known limits |

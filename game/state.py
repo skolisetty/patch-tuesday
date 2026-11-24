@@ -35,12 +35,37 @@ HUMAN_IDS = ["p1", "p2"]
 # Resolution order inside a tick: defenders first, then attackers.
 RESOLVE_ORDER = ["p1", "p2", "blue1", "blue2", "blue3", "red1", "red2"]
 
+# "Call for backup": at most one specialist joins a match, as an optional eighth actor. It exists
+# in state.actors only after backup.spawn(); every loop over actors goes through the three
+# functions below, which return the fixed lists above while it is absent.
+BACKUP_ID = "blue4"
+BACKUP_NODE = 19                       # JUMP-01: where the specialist walks onto the board
+SPECIALISTS = {"responder": "Responder", "hardener": "Hardener", "sentinel": "Sentinel"}
+
+
+def actor_ids(state: "MatchState") -> list[str]:
+    """ACTOR_IDS, plus the specialist once it has joined."""
+    return ACTOR_IDS + [BACKUP_ID] if BACKUP_ID in state.actors else ACTOR_IDS
+
+
+def blue_agent_ids(state: "MatchState") -> list[str]:
+    """BLUE_AGENT_IDS, plus the specialist once it has joined (it decides last of the blue agents)."""
+    return BLUE_AGENT_IDS + [BACKUP_ID] if BACKUP_ID in state.actors else BLUE_AGENT_IDS
+
+
+def resolve_order(state: "MatchState") -> list[str]:
+    """RESOLVE_ORDER with the specialist after the other defenders and before the attackers."""
+    if BACKUP_ID not in state.actors:
+        return RESOLVE_ORDER
+    return ["p1", "p2", "blue1", "blue2", "blue3", BACKUP_ID, "red1", "red2"]
+
 LEDGER_FIELDS = [
     "ledger_id", "match_id", "world_asof", "pipeline_run_id", "model_version", "tick", "ts",
     "actor_id", "team", "kind", "action", "node_id", "cve_id", "score_used", "score_source",
     "p_breach", "roll", "outcome", "policy", "reason_text", "llm_model", "llm_latency_ms",
 ]
-EVENT_KINDS = {"breach", "patched", "restored", "drop", "campaign", "gate", "intel", "info"}
+EVENT_KINDS = {"breach", "patched", "restored", "drop", "campaign", "gate", "intel", "info",
+               "coach", "backup"}
 
 
 def node_xy(node_id: int) -> tuple[int, int]:
@@ -107,6 +132,8 @@ class Card:
     patched_tick: int | None = None
     breached_by: str | None = None      # actor name of the first successful exploit through it
     breached_tick: int | None = None
+    patched_by_id: str | None = None    # actor id of that PATCH (for the Coach's per-player numbers)
+    patch_gain: float | None = None     # points that PATCH earned (0.0 when the card had been attacked)
 
     def public(self) -> dict:
         return {
@@ -184,6 +211,7 @@ class Actor:
     busy_ticks: int = 0
     busy: dict | None = None            # {"action","node","card"} while a multi-tick action runs
     last_seen_node: int | None = None   # where the defenders last saw this red (fog of war)
+    reinforcement: bool = False         # True only for the specialist called in mid-match ("blue4")
 
     @property
     def revealed(self) -> bool:
@@ -198,10 +226,13 @@ class Actor:
             return {"id": self.id, "name": self.name, "team": self.team, "kind": self.kind,
                     "role": self.role, "node_id": seen, "action": "WAIT", "target_node": None,
                     "revealed": False, "busy_ticks": 0}
-        return {"id": self.id, "name": self.name, "team": self.team, "kind": self.kind,
-                "role": self.role, "node_id": self.node_id, "action": self.action,
-                "target_node": self.target_node, "revealed": self.revealed,
-                "busy_ticks": self.busy_ticks}
+        out = {"id": self.id, "name": self.name, "team": self.team, "kind": self.kind,
+               "role": self.role, "node_id": self.node_id, "action": self.action,
+               "target_node": self.target_node, "revealed": self.revealed,
+               "busy_ticks": self.busy_ticks}
+        if self.reinforcement:           # the key exists only on the specialist's entry
+            out["reinforcement"] = True
+        return out
 
 
 @dataclass
@@ -216,6 +247,23 @@ class Score:
     isolate_cost: float = 0.0           # zero or negative
     first_breach: float = 0.0
     held: float = 0.0
+
+
+def new_track() -> dict:
+    """Match history the Coach analyses (game/backup.py). Written by rules.step, read only by the
+    analysis; it never influences a rule, a policy or the random stream. Everything in it was
+    public to the defenders when it was recorded: a breach is announced, a restore is a blue
+    move, a detection is a red becoming visible.
+
+      breaches    [{"tick","node","cve","rank","monitored","open_ticks","untouched","first"}]
+      restores    [{"tick","node","actor"}]
+      detections  [{"tick","node"}]   a red went from unseen to seen through monitoring (not a breach)
+      red_ticks / hidden_ticks        attacker-ticks since the attackers became active / of those, unseen
+      scores      [(red, blue)]       cumulative, after each tick (index i = after tick i)
+      breached    [int]               machines breached at the end of each tick
+    """
+    return {"breaches": [], "restores": [], "detections": [], "red_ticks": 0, "hidden_ticks": 0,
+            "scores": [], "breached": []}
 
 
 @dataclass
@@ -234,6 +282,10 @@ class MatchState:
     memory: dict[str, dict] = field(default_factory=dict)
     campaign: dict | None = None
     next_card_id: int = 0
+    track: dict = field(default_factory=new_track)
+    # "Call for backup" hooks (None / empty while the feature is off):
+    backup: dict | None = None           # the state.backup wire object, kept current by backup.BackupFlow
+    pending_events: list[dict] = field(default_factory=list)   # "coach"/"backup" events not yet sent
 
     @property
     def ticks_total(self) -> int:
@@ -338,6 +390,15 @@ def score_public(state: MatchState) -> dict:
                           "red": {"first_breach": round(s.first_breach, 2), "held": round(s.held, 2)}}}
 
 
+def take_events(state: MatchState) -> list[dict]:
+    """Remove and return the events the backup flow queued for the state message ("coach" and
+    "backup" kinds). The server may call this right after flow.on_tick to send them with the
+    current tick; whatever is still queued when the next tick starts is delivered by
+    match.run_tick in that tick's events, so nothing is lost either way."""
+    out, state.pending_events = list(state.pending_events), []
+    return out
+
+
 DELTA_CAUSES = {"patch", "restore", "isolate_cost", "first_breach", "held"}
 
 
@@ -380,21 +441,27 @@ def is_unseen(state: MatchState, row: dict) -> bool:
 
 def snapshot(state: MatchState, rows: list[dict] | None = None, events: list[dict] | None = None,
              advancing: bool = False, advance: dict | None = None, deltas: list[dict] | None = None,
-             feedback: list[dict] | None = None, reveal: dict | None = None) -> dict:
+             feedback: list[dict] | None = None, reveal: dict | None = None,
+             backup: dict | None = None) -> dict:
     """The {"t":"state"} message of docs/CONTRACTS.md. While a match runs, an unrevealed red's
     position, action and ledger row are fogged (the full rows stay in the ledger files and
     become visible through /api/ledger when the match ends).
 
     `deltas` and `feedback` are this tick's rules.StepResult lists; `reveal` (match.reveal_data)
-    is only ever sent once the match has ended."""
+    is only ever sent once the match has ended.
+
+    `backup` (or, when not passed, state.backup, which backup.BackupFlow keeps current) is the
+    "Call for backup" object. The key is present only when there is one: with the feature off the
+    message has exactly the keys it had before."""
     fog = state.phase == "running"
     rows = [hidden_row(r) if is_unseen(state, r) else r for r in (rows or [])]
-    return {
+    backup = backup if backup is not None else state.backup
+    msg = {
         "t": "state", "match_id": state.match_id, "phase": state.phase, "tick": state.tick,
         "ticks_total": state.ticks_total,
         "world": world_public(state.world, advancing, advance),
         "nodes": [n.public() for n in state.nodes],
-        "actors": [state.actors[a].public(fog) for a in ACTOR_IDS],
+        "actors": [state.actors[a].public(fog) for a in actor_ids(state)],
         "score": score_public(state),
         "ledger": rows,
         "events": [{"kind": e["kind"], "text": e["text"]} for e in (events or [])],
@@ -402,3 +469,6 @@ def snapshot(state: MatchState, rows: list[dict] | None = None, events: list[dic
         "player_feedback": [dict(f) for f in (feedback or [])],
         "reveal": reveal if state.phase == "ended" else None,
     }
+    if backup is not None:
+        msg["backup"] = backup
+    return msg

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from .config import Tuning
 from .rules import Action, breach_base, breach_probability
-from .state import (BLUE_AGENT_IDS, RED_IDS, MatchState, Node, dist, neighbours, step_toward)
+from .state import (RED_IDS, MatchState, Node, blue_agent_ids, dist, neighbours, step_toward)
 
 
 # ------------------------------------------------------------------ views
@@ -575,7 +575,7 @@ def choose(state: MatchState, actor_id: str, rng: random.Random) -> Action:
 def choose_all(state: MatchState, rng: random.Random) -> dict[str, Action]:
     """One decision per free agent, in a fixed order so a seed replays exactly."""
     out: dict[str, Action] = {}
-    for aid in BLUE_AGENT_IDS + RED_IDS:
+    for aid in blue_agent_ids(state) + RED_IDS:
         if state.actors[aid].busy_ticks > 0:
             continue
         out[aid] = choose(state, aid, rng)

@@ -10,6 +10,10 @@
   scripts\start.ps1 -TickSeconds 1  # faster rehearsal (sets PT_TICK_SECONDS for the server)
   scripts\start.ps1 -Band -Telem    # also switch on BAND_ENABLED=1 / TELEM_ENABLED=1
 
+  -Band also switches on "Call for backup" (a Coach agent that can call a specialist into the
+  Blue team through a BAND room) when the BAND_KEY_* variables and BAND_BLUE_CHAT_ID are in .env;
+  scripts\band_setup.py writes them. The start-up summary says whether it is on, and why not.
+
   If PowerShell refuses to run local scripts (execution policy Restricted, or a zip download
   that carries Mark-of-the-Web), run it as:
     powershell -ExecutionPolicy Bypass -File scripts\start.ps1
@@ -121,6 +125,15 @@ if ($okServer) {
         Write-Host ("World {0} from {1}, tick {2}s | LLM reasons: {3} | BAND: {4} | Telem: {5}" -f `
             $s.asof_date, $s.data_source, $s.tick_seconds, $(if ($s.llm.enabled) { 'on' } else { 'templates' }),
             $bandText, $(if ($s.telem.enabled) { 'on' } else { 'off' }))
+        $t = $s.band_team
+        if ($t) {
+            $teamText = if ($t.active) { 'on (Coach posts in the BAND room "Patch Tuesday - Blue team")' }
+                elseif ($t.offline) { 'on without BAND (PT_BACKUP_OFFLINE=1: Coach decides by itself)' }
+                elseif (-not $t.enabled_flag) { 'off (start with -Band to switch it on)' }
+                elseif ($t.disabled_reason) { "off ($($t.disabled_reason))" }
+                else { 'off' }
+            Write-Host "Call for backup: $teamText"
+        }
     } catch { }
 }
 Write-Host ''

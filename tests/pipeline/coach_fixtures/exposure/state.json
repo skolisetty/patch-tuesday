@@ -1,0 +1,284 @@
+{
+ "match_id": "m-fixture-exposure",
+ "tick": 24,
+ "nodes": [
+  {
+   "id": 0,
+   "name": "MAIL-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2001",
+     "score": 0.8,
+     "in_kev": true,
+     "priority_rank": 3,
+     "patch_state": "patched"
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "name": "WEB-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 2,
+   "name": "WEB-02",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 3,
+   "name": "VPN-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2005",
+     "score": 0.94,
+     "in_kev": true,
+     "priority_rank": 1,
+     "patch_state": "unpatched"
+    },
+    {
+     "cve_id": "CVE-2099-2006",
+     "score": 0.45,
+     "in_kev": false,
+     "priority_rank": 20,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "name": "DNS-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 5,
+   "name": "APP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 6,
+   "name": "DB-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2003",
+     "score": 0.05,
+     "in_kev": false,
+     "priority_rank": null,
+     "patch_state": "patched"
+    },
+    {
+     "cve_id": "CVE-2099-2007",
+     "score": 0.6,
+     "in_kev": false,
+     "priority_rank": 15,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "name": "FILE-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 8,
+   "name": "HR-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2004",
+     "score": 0.02,
+     "in_kev": false,
+     "priority_rank": null,
+     "patch_state": "patched"
+    },
+    {
+     "cve_id": "CVE-2099-2012",
+     "score": 0.9,
+     "in_kev": true,
+     "priority_rank": 2,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "name": "DEV-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 10,
+   "name": "CI-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2013",
+     "score": 0.5,
+     "in_kev": false,
+     "priority_rank": 30,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "name": "DC-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2008",
+     "score": 0.35,
+     "in_kev": false,
+     "priority_rank": 45,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "name": "ERP-01",
+   "value": 3,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2009",
+     "score": 0.31,
+     "in_kev": false,
+     "priority_rank": 55,
+     "patch_state": "unpatched"
+    },
+    {
+     "cve_id": "CVE-2099-2010",
+     "score": 0.29,
+     "in_kev": false,
+     "priority_rank": 60,
+     "patch_state": "unpatched"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "name": "WIKI-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 14,
+   "name": "PRINT-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 15,
+   "name": "BKP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2011",
+     "score": 0.7,
+     "in_kev": false,
+     "priority_rank": 10,
+     "patch_state": "patching"
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "name": "IOT-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 17,
+   "name": "POS-01",
+   "value": 2,
+   "state": "isolated",
+   "monitored": false,
+   "cards": [
+    {
+     "cve_id": "CVE-2099-2002",
+     "score": 0.5,
+     "in_kev": false,
+     "priority_rank": 40,
+     "patch_state": "patched",
+     "dropped_tick": 12
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "name": "LAB-01",
+   "value": 1,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  },
+  {
+   "id": 19,
+   "name": "JUMP-01",
+   "value": 2,
+   "state": "healthy",
+   "monitored": false,
+   "cards": []
+  }
+ ],
+ "score": {
+  "red": 26.0,
+  "blue": -0.83,
+  "breaches_total": 2,
+  "breaches_in_top50": 2,
+  "breakdown": {
+   "blue": {
+    "patch": 0.17,
+    "restore": 3.0,
+    "isolate_cost": -4.0
+   },
+   "red": {
+    "first_breach": 10.0,
+    "held": 16.0
+   }
+  }
+ }
+}
