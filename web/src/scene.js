@@ -24,7 +24,7 @@ const ROBOT_HEIGHT = 2.1;
 const MODEL_URL = 'models/RobotExpressive.glb';
 const MODEL_TIMEOUT_MS = 10000;
 
-const BG = 0x152129;
+const BG = 0x0b1030;
 const STATE_COLOR = {
   healthy: 0x1fd18a,
   compromised: 0xff3048,
@@ -214,11 +214,11 @@ class NodeView {
     g.add(pad);
 
     this.rackMat = new THREE.MeshStandardMaterial({
-      color: 0x70aebb,
-      metalness: 0.25,
-      roughness: 0.55,
+      color: 0x2f5fe0,
+      metalness: 0.35,
+      roughness: 0.42,
       emissive: STATE_COLOR.healthy,
-      emissiveIntensity: 0.2,
+      emissiveIntensity: 0.12,
     });
     const rack = (this.rack = new THREE.Mesh(shared.rackGeo, this.rackMat));
     rack.position.set(0, PAD_Y + 1.3, -0.6);
@@ -424,11 +424,11 @@ class NodeView {
 
   update(now, t) {
     if (this.state === 'compromised') {
-      this.rackMat.emissiveIntensity = 0.25 + 0.13 * Math.sin(t * 4 + this.id);
+      this.rackMat.emissiveIntensity = 0.7 + 0.3 * Math.sin(t * 5 + this.id);       // breached: flashing red
     } else if (this.state === 'isolated') {
-      this.rackMat.emissiveIntensity = 0.16;
+      this.rackMat.emissiveIntensity = 0.45;
     } else {
-      this.rackMat.emissiveIntensity = 0.045;
+      this.rackMat.emissiveIntensity = 0.06;
     }
     if (this.monitored) {
       const s = 1 + 0.04 * Math.sin(t * 3 + this.id);
@@ -909,7 +909,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   );
   const camTarget = new THREE.Vector3(0, 1.25, 0.9);
   const composer = new EffectComposer(renderer);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.06, 0.25, 1.8);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.22, 0.4, 0.92);
   const output = new OutputPass();
   composer.addPass(new RenderPass(scene, camera)); composer.addPass(bloom); composer.addPass(output);
 
@@ -959,8 +959,8 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   }
 
   // Lights.
-  scene.add(new THREE.HemisphereLight(0xf1f8ff, 0x91a6b1, 1.25));
-  const sun = new THREE.DirectionalLight(0xfff4e6, 2.0);
+  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x1a2260, 1.0));
+  const sun = new THREE.DirectionalLight(0xfff1d6, 1.9);
   sun.position.set(-11, 26, 15);
   sun.target.position.set(0, 0, 0.5);
   sun.castShadow = true;
@@ -974,17 +974,17 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
-  const fill = new THREE.DirectionalLight(0xc4e4ff, 1.1);
+  const fill = new THREE.DirectionalLight(0x6fb0ff, 0.95);
   fill.position.set(8, 10, 22);
   scene.add(fill);
-  const edge = new THREE.DirectionalLight(0xa3eee1, 0.75);
+  const edge = new THREE.DirectionalLight(0xffa64a, 0.6);
   edge.position.set(-15, 6, -16);
   scene.add(edge);
 
   // Floor.
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(400, 400),
-    new THREE.MeshStandardMaterial({ color: 0x111a20, roughness: 0.9, metalness: 0.05 }),
+    new THREE.MeshStandardMaterial({ color: 0x0f1640, roughness: 0.8, metalness: 0.15 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -1018,8 +1018,8 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     scene.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x1f5f8f })));
 
     // The terraces the rows stand on: one slab per raised row, with a lit front edge.
-    const slabMat = new THREE.MeshStandardMaterial({ color: 0x16242c, roughness: 0.7, metalness: 0.25 });
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0x2c8fa8 });
+    const slabMat = new THREE.MeshStandardMaterial({ color: 0x18246a, roughness: 0.65, metalness: 0.25 });
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x46d9ff });
     const slabW = (COLS - 1) * SPX + 7.5;
     for (let gy = 0; gy < ROWS - 1; gy++) {
       const c = nodeCenter(gy * COLS);
@@ -1043,18 +1043,18 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   const padGeo = new RoundedBoxGeometry(4.3, PAD_Y, 4.3, 2, 0.025);
   const shared = {
     padGeo,
-    padMat: new THREE.MeshStandardMaterial({ color: 0x24343a, roughness: 0.75, metalness: 0.15 }),
+    padMat: new THREE.MeshStandardMaterial({ color: 0x1b2a6b, roughness: 0.6, metalness: 0.25 }),
     rimGeo: new THREE.EdgesGeometry(padGeo),
     rackGeo: new RoundedBoxGeometry(3.0, 2.6, 1.7, 2, 0.12),
     faceGeo: combineBoxes(Array.from({ length: 5 }, (_, i) => [2.5, 0.35, 0.05, 0, -0.9 + i * 0.43, 0.865])),
-    faceMat: new THREE.MeshStandardMaterial({ color: 0x173b4a, roughness: 0.65, metalness: 0.15 }),
+    faceMat: new THREE.MeshStandardMaterial({ color: 0x0c1540, roughness: 0.5, metalness: 0.35 }),
     trimGeo: combineBoxes([
       [0.09, 2.33, 0.07, -1.33, 0, 0.875], [0.09, 2.33, 0.07, 1.33, 0, 0.875],
       ...Array.from({ length: 5 }, (_, i) => [0.7, 0.035, 0.075, 0.12, -0.87 + i * 0.43, 0.925]),
       ...Array.from({ length: 8 }, (_, i) => [0.045, 0.055, 0.6, -0.8 + i * 0.22, 1.32, -0.04]),
     ]),
-    trimMat: new THREE.MeshStandardMaterial({ color: 0xc0d0ce, metalness: 0.65, roughness: 0.35 }),
-    stripClusterGeo: combineBoxes(Array.from({ length: 5 }, (_, i) => [0.14, 0.065, 0.035, -1.0, -0.89 + i * 0.43, 0.915])),
+    trimMat: new THREE.MeshStandardMaterial({ color: 0xffc83d, metalness: 0.7, roughness: 0.3 }),
+    stripClusterGeo: combineBoxes(Array.from({ length: 5 }, (_, i) => [[2.3, 0.045, 0.035, 0.02, -1.07 + i * 0.43, 0.915], [0.16, 0.09, 0.04, -1.0, -0.89 + i * 0.43, 0.92]]).flat()),
     shieldGeo: new THREE.BoxGeometry(3.45, 3.05, 2.15),
     shieldMat: new THREE.MeshBasicMaterial({ color: STATE_COLOR.isolated, transparent: true, opacity: 0.075, depthWrite: false }),
     scanGeo: new THREE.PlaneGeometry(2.25, 1.5),
