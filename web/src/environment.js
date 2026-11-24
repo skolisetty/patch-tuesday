@@ -5,28 +5,65 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 export function createEnvironment(scene, nodeCenter) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const group = new THREE.Group(); scene.add(group);
-  const dark = new THREE.MeshStandardMaterial({ color: 0x7290a3, metalness: 0.22, roughness: 0.6 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0x9bb6c6, metalness: 0.45, roughness: 0.4 });
-  const glow = new THREE.MeshBasicMaterial({ color: 0x488c9e });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x18272b, metalness: 0.22, roughness: 0.6 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x26373a, metalness: 0.45, roughness: 0.4 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x5d9d8e, toneMapped: false });
   function box(size, pos, mat, r = 0.06) {
     const m = new THREE.Mesh(new RoundedBoxGeometry(...size, 2, r), mat);
     m.position.set(...pos); m.receiveShadow = true; group.add(m); return m;
   }
-  box([30.4, 0.65, 26.4], [0, -0.45, 0.6], dark, 0.16);
-  box([30.8, 0.12, 26.8], [0, -0.8, 0.6], steel);
-  for (const x of [-15.3, 15.3]) {
-    box([0.035, 0.035, 25], [x, -0.06, 0.6], glow, 0.01);
-    for (let i = 0; i < 12; i++) box([0.28, 0.03, 0.025], [x, -0.035, -10.8 + i * 2], glow, 0.008);
+  box([33.6, 0.65, 32.4], [0, -0.45, 0.6], dark, 0.16);
+  box([34, 0.12, 32.8], [0, -0.8, 0.6], steel);
+  for (const x of [-17, 17]) {
+    box([0.035, 0.035, 31], [x, -0.06, 0.6], glow, 0.01);
+    for (let i = 0; i < 12; i++) box([0.28, 0.03, 0.025], [x, -0.035, -13.8 + i * 2.35], glow, 0.008);
   }
-  for (const z of [-12.7, 13.9]) box([30, 0.035, 0.035], [0, -0.06, z], glow, 0.01);
+  for (const z of [-15.4, 16.6]) box([33, 0.035, 0.035], [0, -0.06, z], glow, 0.01);
   // Dim data-center structures frame the playable platform; they never enter its footprint.
   for (let i = 0; i < 12; i++) {
     const side = i % 2 ? -1 : 1;
-    const x = side * (18.5 + (i % 3) * 2.2), z = -17 + Math.floor(i / 2) * 3;
+    const x = side * (19.8 + (i % 3) * 2.2), z = -17 + Math.floor(i / 2) * 3;
     const h = 0.8 + ((i * 7) % 9) * 0.2;
     box([1.3, h, 1.3], [x, h / 2 - 1, z], dark);
     box([0.04, h * 0.7, 0.04], [x - 0.5, h / 2 - 1, z + 0.68], glow, 0.01);
   }
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0x5d9d8e, transparent: true, opacity: 0.75, toneMapped: false });
+  const haloMat = new THREE.MeshBasicMaterial({ color: 0x5d9d8e, transparent: true, opacity: 0.5, toneMapped: false });
+  const alarmLights = [];
+  for (const x of [-16, 16]) {
+    box([0.42, 2.6, 0.42], [x, 1.2, -14.4], steel, 0.06);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), beaconMat);
+    beacon.position.set(x, 2.65, -14.4);
+    group.add(beacon);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.045, 8, 24), haloMat);
+    halo.rotation.x = Math.PI / 2;
+    halo.position.set(x, 2.65, -14.4);
+    group.add(halo);
+    const light = new THREE.PointLight(0x5d9d8e, 0.12, 9, 2);
+    light.position.set(x, 2.85, -14.4);
+    group.add(light);
+    alarmLights.push({ beacon, halo, light });
+  }
+  const laserGlowMat = new THREE.MeshBasicMaterial({
+    color: 0x5d9d8e, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const laserCoreMat = new THREE.MeshBasicMaterial({
+    color: 0x9be8d5, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const scanLasers = [-1, 1].map((side) => {
+    const railGlow = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 29, 10), laserGlowMat);
+    const railCore = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 29, 8), laserCoreMat);
+    railGlow.rotation.x = Math.PI / 2;
+    railCore.rotation.x = Math.PI / 2;
+    railGlow.position.set(side * 15.9, 0.12, 0);
+    railCore.position.copy(railGlow.position);
+    const glowBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 4.2, 10), laserGlowMat);
+    const coreBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 4.2, 8), laserCoreMat);
+    glowBeam.position.set(side * 15.9, 2.05, 0);
+    coreBeam.position.copy(glowBeam.position);
+    group.add(railGlow, railCore, glowBeam, coreBeam);
+    return { glowBeam, coreBeam, phase: side < 0 ? 0 : 0.5 };
+  });
   // Soft light pillars in the distant room, and a quiet field of suspended data motes.
   const dustPositions = new Float32Array(160 * 3);
   for (let i = 0; i < 160; i++) {
@@ -51,7 +88,7 @@ export function createEnvironment(scene, nodeCenter) {
   group.add(sparks);
   const pool = Array.from({ length: sparkCount }, () => ({ active: false }));
   const rings = [];
-  let cursor = 0, previous = new Map(), lastMatch, lastTick, ended = false;
+  let cursor = 0, previous = new Map(), lastMatch, lastTick, ended = false, alarmMode = 'safe', alarmStrength = 0;
   const color = new THREE.Color();
   function burst(id, tint, time, count = 24) {
     if (reduced) return;
@@ -59,7 +96,7 @@ export function createEnvironment(scene, nodeCenter) {
     for (let i = 0; i < count; i++) {
       const p = pool[cursor++ % sparkCount];
       const angle = i / count * Math.PI * 2;
-      Object.assign(p, { active: true, x: c.x, z: c.z - 0.35, y: 1,
+      Object.assign(p, { active: true, x: c.x, z: c.z - 0.35, y: c.y + 1,
         vx: Math.cos(angle) * (0.5 + (i % 4) * 0.25), vz: Math.sin(angle) * (0.5 + (i % 4) * 0.25), vy: 1.3 + (i % 5) * 0.4, time });
       color.setHex(tint); sparks.setColorAt((cursor - 1) % sparkCount, color);
     }
@@ -70,7 +107,7 @@ export function createEnvironment(scene, nodeCenter) {
       const mesh = new THREE.Mesh(new THREE.RingGeometry(0.85, 0.89, 48), mat);
       mesh.rotation.x = -Math.PI / 2; group.add(mesh); r = { mesh, active: false }; rings.push(r);
     }
-    if (r) { r.active = true; r.time = time; r.mesh.position.set(c.x, 0.12, c.z + 0.5); r.mesh.material.color.setHex(tint); r.mesh.visible = true; }
+    if (r) { r.active = true; r.time = time; r.mesh.position.set(c.x, c.y + 0.12, c.z + 0.5); r.mesh.material.color.setHex(tint); r.mesh.visible = true; }
   }
   function applyState(state) {
     const signature = state.match_id + '|' + state.tick;
@@ -78,7 +115,15 @@ export function createEnvironment(scene, nodeCenter) {
     lastTick = signature;
     if (lastMatch !== state.match_id) { previous.clear(); ended = false; lastMatch = state.match_id; }
     const time = performance.now() / 1000;
-    for (const n of state.nodes || []) {
+    const nodes = Array.isArray(state.nodes) ? state.nodes : [];
+    const breached = nodes.filter((n) => n.state === 'compromised').length;
+    const isolated = nodes.filter((n) => n.state === 'isolated').length;
+    if (state.phase === 'ended') alarmMode = (state.score?.blue || 0) >= (state.score?.red || 0) ? 'victory' : 'defeat';
+    else if (breached) alarmMode = 'breach';
+    else if (isolated) alarmMode = 'isolated';
+    else alarmMode = 'safe';
+    alarmStrength = Math.min(1, (breached + isolated) / 4);
+    for (const n of nodes) {
       const before = previous.get(n.id);
       const patched = (n.cards || []).filter((c) => c.patch_state === 'patched').length;
       if (before) {
@@ -97,9 +142,34 @@ export function createEnvironment(scene, nodeCenter) {
   }
   function update(t) {
     if (!reduced) { dust.rotation.y = t * 0.007; dust.position.y = Math.sin(t * 0.2) * 0.15; }
+    const pulse = reduced ? 0.75 : 0.55 + 0.45 * Math.abs(Math.sin(t * (alarmMode === 'breach' || alarmMode === 'defeat' ? 7 : 3)));
+    const alertColor = alarmMode === 'breach' || alarmMode === 'defeat' ? 0xff526b
+      : alarmMode === 'isolated' ? 0xffbf69
+        : alarmMode === 'victory' ? 0x5ae5c0 : 0x5d9d8e;
+    glow.color.setHex(alertColor);
+    beaconMat.color.setHex(alertColor);
+    haloMat.color.setHex(alertColor);
+    laserGlowMat.color.setHex(alertColor);
+    laserCoreMat.color.setHex(alertColor);
+    laserGlowMat.opacity = alarmMode === 'safe' ? 0.15 : 0.22 + alarmStrength * 0.18 * pulse;
+    laserCoreMat.opacity = alarmMode === 'safe' ? 0.68 : 0.72 + alarmStrength * 0.28 * pulse;
+    scanLasers.forEach(({ glowBeam, coreBeam, phase }) => {
+      const progress = reduced ? 0.5 : (t * 0.18 + phase) % 1;
+      const z = -14.4 + progress * 29;
+      glowBeam.position.z = z;
+      coreBeam.position.z = z;
+    });
+    alarmLights.forEach(({ beacon, halo, light }) => {
+      const blink = alarmMode === 'safe' ? 0.7 : pulse;
+      beaconMat.opacity = alarmMode === 'safe' ? 0.65 : 0.55 + blink * 0.4;
+      haloMat.opacity = alarmMode === 'safe' ? 0.4 : 0.42 + blink * 0.45;
+      halo.scale.setScalar(alarmMode === 'safe' ? 1 : 1 + blink * 0.12);
+      light.color.setHex(alertColor);
+      light.intensity = alarmMode === 'safe' ? 0.12 : 0.5 + alarmStrength * 1.5 * blink;
+    });
     links.forEach(([a, b], i) => {
       const k = reduced ? 0.5 : (t * 0.19 + i * 0.137) % 1;
-      dummy.position.set(THREE.MathUtils.lerp(a.x, b.x, k), 0.105, THREE.MathUtils.lerp(a.z, b.z, k) + 0.55);
+      dummy.position.set(THREE.MathUtils.lerp(a.x, b.x, k), THREE.MathUtils.lerp(a.y, b.y, k) + 0.105, THREE.MathUtils.lerp(a.z, b.z, k) + 0.55);
       dummy.scale.setScalar(1); dummy.updateMatrix(); packets.setMatrixAt(i, dummy.matrix);
     });
     packets.instanceMatrix.needsUpdate = true;

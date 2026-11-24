@@ -17,14 +17,14 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const COLS = 5;
 const ROWS = 4;
-const SPX = 5.4; // spacing between columns
-const SPZ = 5.8; // spacing between rows
+const SPX = 6.8; // spacing between columns
+const SPZ = 8.0; // spacing between rows
 const PAD_Y = 0.06;
 const ROBOT_HEIGHT = 2.1;
 const MODEL_URL = 'models/RobotExpressive.glb';
 const MODEL_TIMEOUT_MS = 10000;
 
-const BG = 0x8eacbf;
+const BG = 0x152129;
 const STATE_COLOR = {
   healthy: 0x1fd18a,
   compromised: 0xff3048,
@@ -85,7 +85,8 @@ const LOOPING = new Set(['Idle', 'Walking', 'Running', 'Dance']);
 function nodeCenter(id) {
   const gx = ((id % COLS) + COLS) % COLS;
   const gy = Math.floor(id / COLS);
-  return { x: (gx - (COLS - 1) / 2) * SPX, z: (gy - (ROWS - 1) / 2) * SPZ };
+  const y = 0;
+  return { x: (gx - (COLS - 1) / 2) * SPX, y, z: (gy - (ROWS - 1) / 2) * SPZ };
 }
 
 function combineBoxes(boxes) {
@@ -98,7 +99,7 @@ function combineBoxes(boxes) {
 function slotPosition(nodeId, actor, out) {
   const c = nodeCenter(Number.isFinite(nodeId) ? nodeId : 0);
   const s = SLOT[actor.id] || (isBackupActor(actor) ? SLOT.blue4 : [0, 1.5]);
-  return out.set(c.x + s[0], PAD_Y, c.z + s[1]);
+  return out.set(c.x + s[0], c.y + PAD_Y, c.z + s[1]);
 }
 
 function hex(n) {
@@ -199,7 +200,7 @@ class NodeView {
 
     const c = nodeCenter(id);
     const g = (this.group = new THREE.Group());
-    g.position.set(c.x, 0, c.z);
+    g.position.set(c.x, c.y, c.z);
 
     const pad = new THREE.Mesh(shared.padGeo, shared.padMat);
     pad.position.set(0, PAD_Y / 2, 0.55);
@@ -209,7 +210,7 @@ class NodeView {
     g.add(pad);
 
     this.rackMat = new THREE.MeshStandardMaterial({
-      color: 0x28516d,
+      color: 0x70aebb,
       metalness: 0.25,
       roughness: 0.55,
       emissive: STATE_COLOR.healthy,
@@ -758,6 +759,7 @@ class ActorView {
       }
       const e = k * k * (3 - 2 * k);
       this.group.position.lerpVectors(this.from, this.to, e);
+      this.group.position.y += Math.sin(Math.PI * e) * (0.65 + Math.abs(this.to.y - this.from.y) * 0.45);
     } else {
       this.targetYaw = this.restYaw;
     }
@@ -872,7 +874,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 0.92;
   renderer.setClearColor(BG, 1);
 
   const scene = new THREE.Scene();
@@ -880,7 +882,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const environment = pmrem.fromScene(studio, 0.04).texture;
   scene.environment = environment;
-  scene.environmentIntensity = 0.85;
+  scene.environmentIntensity = 0.7;
   studio.dispose(); pmrem.dispose();
   scene.background = new THREE.Color(BG);
   // A clean studio backdrop keeps every row and its status labels readable.
@@ -890,22 +892,22 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   // a classic isometric angle for spectating.
   const params = new URLSearchParams(location.search);
   const yaw = THREE.MathUtils.degToRad(Number(params.get('yaw')) || 0);
-  const pitch = THREE.MathUtils.degToRad(Math.min(80, Math.max(25, Number(params.get('pitch')) || 36)));
+  const pitch = THREE.MathUtils.degToRad(Math.min(80, Math.max(25, Number(params.get('pitch')) || 47)));
   const camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.5, 400);
   const camDir = new THREE.Vector3(
     Math.sin(yaw) * Math.cos(pitch),
     Math.sin(pitch),
     Math.cos(yaw) * Math.cos(pitch),
   );
-  const camTarget = new THREE.Vector3(0, 0.9, 0.9);
+  const camTarget = new THREE.Vector3(0, 1.25, 0.9);
   const composer = new EffectComposer(renderer);
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.06, 0.25, 1.8);
   const output = new OutputPass();
   composer.addPass(new RenderPass(scene, camera)); composer.addPass(bloom); composer.addPass(output);
 
   // Points the view must contain: the grid footprint plus label height.
-  const halfX = ((COLS - 1) / 2) * SPX + 2.3;
-  const zMin = -((ROWS - 1) / 2) * SPZ - 1.6;
+  const halfX = ((COLS - 1) / 2) * SPX + 3.0;
+  const zMin = -((ROWS - 1) / 2) * SPZ - 2.8;
   const zMax = ((ROWS - 1) / 2) * SPZ + 3.1;
   const fitPoints = [];
   for (const x of [-halfX, halfX]) {
@@ -948,8 +950,8 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   }
 
   // Lights.
-  scene.add(new THREE.HemisphereLight(0xf1f8ff, 0x91a6b1, 1.5));
-  const sun = new THREE.DirectionalLight(0xfff4e6, 2.4);
+  scene.add(new THREE.HemisphereLight(0xf1f8ff, 0x91a6b1, 1.25));
+  const sun = new THREE.DirectionalLight(0xfff4e6, 2.0);
   sun.position.set(-11, 26, 15);
   sun.target.position.set(0, 0, 0.5);
   sun.castShadow = true;
@@ -963,25 +965,25 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
-  const fill = new THREE.DirectionalLight(0xc4e4ff, 1.4);
+  const fill = new THREE.DirectionalLight(0xc4e4ff, 1.1);
   fill.position.set(8, 10, 22);
   scene.add(fill);
-  const edge = new THREE.DirectionalLight(0xa3eee1, 1.0);
+  const edge = new THREE.DirectionalLight(0xa3eee1, 0.75);
   edge.position.set(-15, 6, -16);
   scene.add(edge);
 
   // Floor.
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(400, 400),
-    new THREE.MeshStandardMaterial({ color: 0x7594a6, roughness: 0.9, metalness: 0.05 }),
+    new THREE.MeshStandardMaterial({ color: 0x111a20, roughness: 0.9, metalness: 0.05 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
-  const gridHelper = new THREE.GridHelper(160, 80, 0x8ba9b8, 0x9bb6c4);
+  const gridHelper = new THREE.GridHelper(160, 80, 0x35565b, 0x263e45);
   gridHelper.position.y = 0.01;
   gridHelper.material.transparent = true;
-  gridHelper.material.opacity = 0.18;
+  gridHelper.material.opacity = 0.2;
   gridHelper.material.depthWrite = false;
   scene.add(gridHelper);
   const ambience = createEnvironment(scene, nodeCenter);
@@ -994,11 +996,11 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
         const a = nodeCenter(y * COLS + x);
         if (x + 1 < COLS) {
           const b = nodeCenter(y * COLS + x + 1);
-          pts.push(a.x, 0.02, a.z + 0.55, b.x, 0.02, b.z + 0.55);
+          pts.push(a.x, a.y + 0.02, a.z + 0.55, b.x, b.y + 0.02, b.z + 0.55);
         }
         if (y + 1 < ROWS) {
           const b = nodeCenter((y + 1) * COLS + x);
-          pts.push(a.x, 0.02, a.z + 0.55, b.x, 0.02, b.z + 0.55);
+          pts.push(a.x, a.y + 0.02, a.z + 0.55, b.x, b.y + 0.02, b.z + 0.55);
         }
       }
     }
@@ -1011,17 +1013,17 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
   const padGeo = new RoundedBoxGeometry(4.3, PAD_Y, 4.3, 2, 0.025);
   const shared = {
     padGeo,
-    padMat: new THREE.MeshStandardMaterial({ color: 0x4e7187, roughness: 0.75, metalness: 0.15 }),
+    padMat: new THREE.MeshStandardMaterial({ color: 0x24343a, roughness: 0.75, metalness: 0.15 }),
     rimGeo: new THREE.EdgesGeometry(padGeo),
     rackGeo: new RoundedBoxGeometry(3.0, 2.6, 1.7, 2, 0.12),
     faceGeo: combineBoxes(Array.from({ length: 5 }, (_, i) => [2.5, 0.35, 0.05, 0, -0.9 + i * 0.43, 0.865])),
-    faceMat: new THREE.MeshStandardMaterial({ color: 0x153347, roughness: 0.65, metalness: 0.15 }),
+    faceMat: new THREE.MeshStandardMaterial({ color: 0x173b4a, roughness: 0.65, metalness: 0.15 }),
     trimGeo: combineBoxes([
       [0.09, 2.33, 0.07, -1.33, 0, 0.875], [0.09, 2.33, 0.07, 1.33, 0, 0.875],
       ...Array.from({ length: 5 }, (_, i) => [0.7, 0.035, 0.075, 0.12, -0.87 + i * 0.43, 0.925]),
       ...Array.from({ length: 8 }, (_, i) => [0.045, 0.055, 0.6, -0.8 + i * 0.22, 1.32, -0.04]),
     ]),
-    trimMat: new THREE.MeshStandardMaterial({ color: 0x9db8c7, metalness: 0.65, roughness: 0.35 }),
+    trimMat: new THREE.MeshStandardMaterial({ color: 0xc0d0ce, metalness: 0.65, roughness: 0.35 }),
     stripClusterGeo: combineBoxes(Array.from({ length: 5 }, (_, i) => [0.14, 0.065, 0.035, -1.0, -0.89 + i * 0.43, 0.915])),
     shieldGeo: new THREE.BoxGeometry(3.45, 3.05, 2.15),
     shieldMat: new THREE.MeshBasicMaterial({ color: STATE_COLOR.isolated, transparent: true, opacity: 0.075, depthWrite: false }),
@@ -1231,7 +1233,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
     const c = nodeCenter(nodeId);
     f.x = c.x;
     f.z = c.z + LABEL_Z;
-    f.y0 = LABEL_Y + 0.95 + stack * 0.95; // just above the name label, stacked when several land at once
+    f.y0 = c.y + LABEL_Y + 0.95 + stack * 0.95; // just above the name label, stacked when several land at once
     f.t0 = now + stack * 110;
     f.active = true;
     f.mat.opacity = 0;
@@ -1367,7 +1369,7 @@ export function createScene(canvas, container, { onNote, onPick } = {}) {
       destRings.set(playerId, ring);
     }
     const c = nodeCenter(nodeId);
-    ring.position.set(c.x, 0.1 + (playerId === 'p2' ? 0.02 : 0), c.z + 0.55);
+    ring.position.set(c.x, c.y + 0.1 + (playerId === 'p2' ? 0.02 : 0), c.z + 0.55);
     ring.scale.setScalar(playerId === 'p2' ? 1.12 : 1);
     ring.visible = true;
   }
