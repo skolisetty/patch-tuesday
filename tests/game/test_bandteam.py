@@ -245,7 +245,7 @@ def test_join_adds_the_specialist_to_the_room_before_it_speaks():
     room = Room(clock)
 
     async def steps(team):
-        team.submit(Say("coach", "Suman approved: calling in Responder.", "humans", "decision"))
+        team.submit(Say("coach", "Alex approved: calling in Responder.", "humans", "decision"))
         team.submit(Say("responder", "Responder here. FILE-01 is breached and worth 2: going there now.", "team",
                         "join", role="responder"))
         team.submit(Say("responder", "Restored FILE-01.", "team", "report"))
@@ -514,9 +514,9 @@ def test_message_age_uses_bands_clock_when_ours_is_wrong():
 
 def test_inject_puts_a_cleaned_reply_in_the_inbox():
     team = bandteam.BandTeam(keys=KEYS, ids=IDS, chat_id=CHAT, flag=True)
-    team.inject(f"@[[{IDS['coach']}]] <b>YES</b> " + "y" * 400, "Suman\nK")
+    team.inject(f"@[[{IDS['coach']}]] <b>YES</b> " + "y" * 400, "Alex\nK")
     (text, by), = team.drain_inbox()
-    assert text.startswith("<b>YES</b> y") and len(text) == 200 and by == "Suman K"
+    assert text.startswith("<b>YES</b> y") and len(text) == 200 and by == "Alex K"
 
 
 # ------------------------------------------------------------------ errors

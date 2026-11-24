@@ -380,7 +380,7 @@ The feature is on for a match when all of these hold at match start; otherwise t
 
 After the join, `state.actors` has an eighth entry, last in the list: `{"id":"blue4","name":"Responder","team":"blue","kind":"agent","role":"responder","reinforcement":true, ...}`. The `reinforcement` key exists only on that entry. It starts at JUMP-01 (machine 19) and obeys the same rules, durations and scoring as any blue agent. Its ledger rows are normal rows (`actor_id` `blue4`, `kind` `agent`, `team` `blue`, `policy` = its role).
 
-Two new `events[].kind` values: `coach` (the analysis in one sentence, then the recommendation) and `backup` (`Responder joined the Blue team (approved by Suman via BAND).`, `Backup declined.`). Neither goes to the highlights room of the BAND event mirror.
+Two new `events[].kind` values: `coach` (the analysis in one sentence, then the recommendation) and `backup` (`Responder joined the Blue team (approved by Alex via BAND).`, `Backup declined.`). Neither goes to the highlights room of the BAND event mirror.
 
 ### Flow
 
