@@ -22,12 +22,12 @@ export function createCharacter(id, tint = 0x55e3db) {
     materials.push(m);
     return m;
   };
-  const armor = material(isHost ? 0x263e5b : red ? 0xd48b92 : 0xb7cfe2, 0.4, 0.4);
-  const steel = material(0xdae4ea, 0.65, 0.3);
+  const armor = material(isHost ? 0x263e5b : red ? 0xb45c67 : 0x7394aa, 0.4, 0.4);
+  const steel = material(0xc3d0d9, 0.65, 0.3);
   const black = material(0x253951, 0.25, 0.45);
   const accent = material(tint, 0.32, 0.4);
   const light = material(tint, 0.25, 0.2, true);
-  const shirt = material(isHost ? 0xf3f4ef : 0xe4eef5, 0.15, 0.55);
+  const shirt = material(isHost ? 0xf0f0e9 : 0xd5e1e9, 0.15, 0.55);
   const gold = material(0xbfa575, 0.85, 0.25);
   function box(parent, size, pos, mat, radius = 0.04) {
     const m = new THREE.Mesh(geometry(...size, radius), mat);
